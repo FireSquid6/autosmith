@@ -10,6 +10,12 @@ export function getToolkitFromCodeRepository(repo: CodeRepository) {
       execute: async () => repo.getProvider(),
     }),
 
+    repoGetUrl: tool({
+      description: "Get the clone URL of the repository",
+      inputSchema: z.object({}),
+      execute: async () => repo.getUrl(),
+    }),
+
     repoListPullRequests: tool({
       description: "List pull requests in the repository",
       inputSchema: z.object({

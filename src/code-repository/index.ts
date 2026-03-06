@@ -43,6 +43,7 @@ export interface Release {
 
 export interface CodeRepository {
   getProvider(): string;
+  getUrl(): string;
 
   // Pull Requests
   listPullRequests(state?: "open" | "closed" | "all"): Promise<PullRequest[]>;

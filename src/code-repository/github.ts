@@ -16,6 +16,10 @@ export class GitHubRepository implements CodeRepository {
     return "github";
   }
 
+  getUrl(): string {
+    return `https://github.com/${this.owner}/${this.repo}.git`;
+  }
+
   // Pull Requests
 
   async listPullRequests(state: "open" | "closed" | "all" = "open"): Promise<PullRequest[]> {
