@@ -132,11 +132,11 @@ const agentCreateCommand = new Command()
   .requiredOption("--project <projectName>", "project name")
   .requiredOption("--name <name>", "agent name")
   .requiredOption("--provider <provider>", "model provider")
-  .requiredOption("--container-id <containerId>", "container ID")
-  .requiredOption("--docker-image <dockerImage>", "docker image")
-  .requiredOption(
+  .option("--docker-image <dockerImage>", "docker image", "fleet-agent:latest")
+  .option(
     "--filesystem-mount-point <filesystemMountPoint>",
-    "path where workspace is mounted"
+    "path where workspace is mounted",
+    "/workspace"
   )
   .action(async function (this: Command, opts) {
     const client = makeClient(getUrl(this));
@@ -144,7 +144,6 @@ const agentCreateCommand = new Command()
       projectName: opts.project,
       name: opts.name,
       provider: opts.provider,
-      containerId: opts.containerId,
       dockerImage: opts.dockerImage,
       filesystemMountPoint: opts.filesystemMountPoint,
     });

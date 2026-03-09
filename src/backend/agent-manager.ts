@@ -18,6 +18,10 @@ export class AgentManager {
     return `${projectName}/${agentName}`;
   }
 
+  private containerId(projectName: string, agentName: string): string {
+    return `fleet-${projectName}-${agentName}`;
+  }
+
   async start(projectName: string, agentName: string): Promise<void> {
     const key = this.key(projectName, agentName);
     if (this.running.has(key)) return;
@@ -29,13 +33,36 @@ export class AgentManager {
     ]);
 
     const token = await this.store.tokens.get(project.tokenName);
+    const containerId = this.containerId(projectName, agentName);
+    const hostWorkspacePath = this.store.agentWorkspacePath(projectName, agentName);
 
-    await this.docker.containerStart(agentConfig.containerId);
+
+    console.log("Got stuff...");
+
+    const containerExists = await this.docker.containerInspect(containerId).then(() => true, () => false);
+
+    console.log("Container was inspected");
+
+    if (!containerExists) {
+      await this.docker.containerCreate(
+        {
+          Image: agentConfig.dockerImage,
+          HostConfig: {
+            Binds: [`${hostWorkspacePath}:${agentConfig.filesystemMountPoint}`],
+          },
+        },
+        { name: containerId },
+      );
+    }
+    console.log("Created container");
+
+    await this.docker.containerStart(containerId);
+    console.log("Started container");
 
     const fs = new LocalDockerFilesystem({
       client: this.docker,
-      containerId: agentConfig.containerId,
-      hostWorkspacePath: this.store.agentWorkspacePath(projectName, agentName),
+      containerId,
+      hostWorkspacePath,
       containerWorkspacePath: agentConfig.filesystemMountPoint,
     });
 
@@ -52,8 +79,7 @@ export class AgentManager {
   async stop(projectName: string, agentName: string): Promise<void> {
     const key = this.key(projectName, agentName);
     this.running.delete(key);
-    const agentConfig = await this.store.getAgent(projectName, agentName);
-    await this.docker.containerStop(agentConfig.containerId);
+    await this.docker.containerStop(this.containerId(projectName, agentName));
   }
 
   get(projectName: string, agentName: string): Agent | undefined {
