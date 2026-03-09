@@ -2,12 +2,14 @@ import { serve } from "bun";
 import index from "../index.html";
 import { server } from "./server";
 
+export interface ServerOptions {
+  port: number;
+}
+
 
 export function startServer({
-  port
-}: {
-  port: number
-}) {
+  port,
+}: ServerOptions) {
   server.assertAllDefined();
 
   const httpServer = serve({

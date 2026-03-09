@@ -1,6 +1,5 @@
 import { Command } from "@commander-js/extra-typings";
 import { startServer } from "./backend";
-import { runAgent } from "./backend/agent";
 
 const serveCommand = new Command()
   .name("serve")
@@ -10,15 +9,9 @@ const serveCommand = new Command()
     startServer({ port });
   })
 
-const agentCommand = new Command()
-  .name("agent")
-  .action(() => {
-    runAgent();
-  })
 
 
 const mainCommand = new Command()
 mainCommand.addCommand(serveCommand)
-mainCommand.addCommand(agentCommand)
 
 mainCommand.parse();
