@@ -8,7 +8,7 @@ export interface ServerOptions {
 }
 
 export async function startServer({ port, storeDirectory }: ServerOptions) {
-  const { server } = await createServer(storeDirectory, port);
+  const { server, agents } = await createServer(storeDirectory, port);
 
   const httpServer = serve({
     port,
@@ -29,6 +29,16 @@ export async function startServer({ port, storeDirectory }: ServerOptions) {
       console: true,
     },
   });
+
+  const shutdown = async () => {
+    console.log("Shutting down — stopping all agents...");
+    await agents.stopAll();
+    httpServer.stop();
+    process.exit(0);
+  };
+
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
 
   console.log(`Server running at ${httpServer.url}`);
   return httpServer;

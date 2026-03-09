@@ -1,5 +1,6 @@
 import { Command } from "@commander-js/extra-typings";
 import { startServer } from "./backend";
+import { clientCommand } from "./cli/client";
 
 const serveCommand = new Command()
   .name("serve")
@@ -13,4 +14,5 @@ const serveCommand = new Command()
 
 const mainCommand = new Command();
 mainCommand.addCommand(serveCommand);
+mainCommand.addCommand(clientCommand);
 mainCommand.parse();
