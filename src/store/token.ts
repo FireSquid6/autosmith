@@ -1,41 +1,47 @@
-import YAML from "yaml"
-import fs from "fs";
+import YAML from "yaml";
 
+async function readTokenFile(path: string): Promise<Record<string, string>> {
+  const file = Bun.file(path);
+  if (!(await file.exists())) return {};
 
-function readTokenYamlFile(yamlFile: string): Record<string, string> {
-  const record: Record<string, string> = {};
-  const text = fs.readFileSync(yamlFile).toString();
-  const obj: any = YAML.parse(text);
-  
-  for (const property in obj) {
-    const val = obj[property];
+  const text = await file.text();
+  const obj = YAML.parse(text) ?? {};
+
+  for (const [key, val] of Object.entries(obj)) {
     if (typeof val !== "string") {
-      throw new Error("Failed to read token file. Contains non-string values");
+      throw new Error(`Token file contains non-string value for key "${key}"`);
     }
-    record[property] = val;
   }
 
-  return record;
+  return obj as Record<string, string>;
 }
 
-
 export class TokenStore {
-  private yamlFile: string;
+  private path: string;
 
-  constructor(yamlFile: string) {
-    this.yamlFile = yamlFile;
+  constructor(path: string) {
+    this.path = path;
   }
 
-  get(k: string): string | undefined {
-    const data = readTokenYamlFile(this.yamlFile);
-    return data[k];
+  async get(name: string): Promise<string | undefined> {
+    const data = await readTokenFile(this.path);
+    return data[name];
   }
 
-  set(k: string, val: string): void {
-    const data = readTokenYamlFile(this.yamlFile);
-    data[k] = val;
+  async set(name: string, value: string): Promise<void> {
+    const data = await readTokenFile(this.path);
+    data[name] = value;
+    await Bun.write(this.path, YAML.stringify(data));
+  }
 
-    const serialized = YAML.stringify(data);
-    fs.writeFileSync(this.yamlFile, serialized);
+  async delete(name: string): Promise<void> {
+    const data = await readTokenFile(this.path);
+    delete data[name];
+    await Bun.write(this.path, YAML.stringify(data));
+  }
+
+  async list(): Promise<string[]> {
+    const data = await readTokenFile(this.path);
+    return Object.keys(data);
   }
 }
