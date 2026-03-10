@@ -1,0 +1,225 @@
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useParams } from "react-router-dom";
+import { PaperAirplaneIcon } from "@heroicons/react/24/solid";
+import { client } from "../client";
+import ChatMessage, { type Message, type MessagePart, type ToolPart } from "../components/ChatMessage";
+
+type ConnectionState = "connecting" | "connected" | "error";
+
+export default function AgentChat() {
+  const { projectName, agentName } = useParams<{
+    projectName: string;
+    agentName: string;
+  }>();
+
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [streamingMessage, setStreamingMessage] = useState<Message | null>(null);
+  const [connectionState, setConnectionState] = useState<ConnectionState>("connecting");
+  const [connectionError, setConnectionError] = useState<string>("");
+  const [input, setInput] = useState("");
+  const [isSending, setIsSending] = useState(false);
+
+  const tokenRef = useRef<string | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const params = { projectName: projectName!, agentName: agentName! };
+
+  useEffect(() => {
+    let active = true;
+    let unsub: (() => void) | null = null;
+
+    const connect = async () => {
+      setConnectionState("connecting");
+      setConnectionError("");
+
+      const result = await client.connect("agentSession", params, {});
+
+      if (!active) return;
+
+      if (!result.success) {
+        setConnectionState("error");
+        setConnectionError(result.error.message);
+        return;
+      }
+
+      tokenRef.current = result.token;
+
+      unsub = await client.subscribe("agentSession", params, result.token, (msg) => {
+        if (!active) return;
+
+        if (msg.type === "text") {
+          setStreamingMessage((prev) => {
+            if (!prev) return { role: "agent", parts: [{ type: "text", text: msg.text }], isStreaming: true };
+            const parts = [...prev.parts];
+            const last = parts[parts.length - 1];
+            if (last?.type === "text") {
+              parts[parts.length - 1] = { type: "text", text: last.text + msg.text };
+            } else {
+              parts.push({ type: "text", text: msg.text });
+            }
+            return { ...prev, parts };
+          });
+        } else if (msg.type === "tool-call") {
+          setStreamingMessage((prev) => {
+            const newPart: ToolPart = { type: "tool", toolName: msg.toolName, input: msg.input };
+            if (!prev) return { role: "agent", parts: [newPart], isStreaming: true };
+            return { ...prev, parts: [...prev.parts, newPart] };
+          });
+        } else if (msg.type === "tool-result") {
+          setStreamingMessage((prev) => {
+            if (!prev) return prev;
+            const parts = prev.parts.map<MessagePart>((p) => {
+              if (
+                p.type === "tool" &&
+                p.toolName === msg.toolName &&
+                p.result === undefined
+              ) {
+                return { ...p, result: msg.result };
+              }
+              return p;
+            });
+            return { ...prev, parts };
+          });
+        } else if (msg.type === "error") {
+          setStreamingMessage((prev) => {
+            const errorPart: MessagePart = { type: "error", error: msg.error };
+            if (!prev) return { role: "agent", parts: [errorPart], isStreaming: true };
+            return { ...prev, parts: [...prev.parts, errorPart] };
+          });
+        } else if (msg.type === "done") {
+          setStreamingMessage((prev) => {
+            if (prev && prev.parts.length > 0) {
+              setMessages((msgs) => [...msgs, { ...prev, isStreaming: false }]);
+            }
+            setIsSending(false);
+            return null;
+          });
+        }
+      });
+
+      if (active) {
+        setConnectionState("connected");
+      }
+    };
+
+    connect();
+
+    return () => {
+      active = false;
+      unsub?.();
+      tokenRef.current = null;
+    };
+  }, [projectName, agentName]);
+
+  // Auto-scroll on new content
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, streamingMessage]);
+
+  const sendMessage = useCallback(async () => {
+    const text = input.trim();
+    if (!text || !tokenRef.current || isSending || connectionState !== "connected") return;
+
+    setInput("");
+    setIsSending(true);
+    setMessages((msgs) => [...msgs, { role: "user", parts: [{ type: "text", text }] }]);
+    setStreamingMessage({ role: "agent", parts: [], isStreaming: true });
+
+    await client.send("agentSession", params, tokenRef.current, { type: "input", text });
+  }, [input, isSending, connectionState, projectName, agentName]);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  const allMessages = streamingMessage ? [...messages, streamingMessage] : messages;
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="px-6 py-4 border-b border-base-300 bg-base-100 flex items-center gap-3 shrink-0">
+        <div>
+          <h2 className="text-lg font-bold leading-tight">{agentName}</h2>
+          <p className="text-xs text-base-content/50">{projectName}</p>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          {connectionState === "connecting" && (
+            <span className="flex items-center gap-1.5 text-xs text-base-content/50">
+              <span className="loading loading-spinner loading-xs" />
+              Connecting…
+            </span>
+          )}
+          {connectionState === "connected" && (
+            <span className="flex items-center gap-1.5 text-xs text-success">
+              <span className="w-2 h-2 rounded-full bg-success inline-block" />
+              Connected
+            </span>
+          )}
+          {connectionState === "error" && (
+            <span className="flex items-center gap-1.5 text-xs text-error">
+              <span className="w-2 h-2 rounded-full bg-error inline-block" />
+              Disconnected
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Error banner */}
+      {connectionState === "error" && (
+        <div className="alert alert-error rounded-none border-x-0 border-t-0">
+          <span>{connectionError || "Could not connect to agent. Make sure it is running."}</span>
+        </div>
+      )}
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto px-4 py-4">
+        {allMessages.length === 0 && connectionState === "connected" && (
+          <div className="flex items-center justify-center h-full text-base-content/30 text-sm italic">
+            Send a message to start the conversation
+          </div>
+        )}
+
+        {allMessages.map((msg, i) => (
+          <ChatMessage key={i} message={msg} />
+        ))}
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Input area */}
+      <div className="px-4 py-3 border-t border-base-300 bg-base-100 shrink-0">
+        <div className="flex items-end gap-2">
+          <textarea
+            ref={textareaRef}
+            className="textarea textarea-bordered flex-1 resize-none min-h-[2.75rem] max-h-40"
+            placeholder={
+              connectionState === "connected"
+                ? "Message agent… (Enter to send, Shift+Enter for newline)"
+                : "Waiting for connection…"
+            }
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={connectionState !== "connected" || isSending}
+            rows={1}
+          />
+          <button
+            className="btn btn-primary btn-square shrink-0"
+            onClick={sendMessage}
+            disabled={!input.trim() || connectionState !== "connected" || isSending}
+            title="Send"
+          >
+            {isSending ? (
+              <span className="loading loading-spinner loading-sm" />
+            ) : (
+              <PaperAirplaneIcon className="w-5 h-5" />
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
