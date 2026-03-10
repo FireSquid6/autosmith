@@ -1,26 +1,32 @@
 import { relative, join, resolve } from "node:path";
 import { PassThrough } from "node:stream";
 import { createConnection } from "node:net";
-import { DockerClient } from "@docker/node-sdk";
 import type { Filesystem, DirectoryEntry, ContentMatch, CommandResult, ProcessHandle } from "./index";
 import { LocalFilesystem } from "./local";
 
+// TODO: replace with a Bun-compatible Docker client (see ~/docker-sdk.md)
+type DockerClient = {
+  containerExec(id: string, config: unknown): Promise<{ Id: string }>;
+  execStart(execId: string, stdout: unknown, stderr: unknown): Promise<void>;
+  execInspect(execId: string): Promise<{ ExitCode: number | null }>;
+};
+
 export class LocalDockerFilesystem implements Filesystem {
   private local: LocalFilesystem;
-  private client: DockerClient;
+  private client: DockerClient | null;
   private containerId: string;
   private hostWorkspacePath: string;
   private containerWorkspacePath: string;
 
   constructor(params: {
-    client: DockerClient;
+    client?: DockerClient;
     containerId: string;
     // The host directory that is bind-mounted into the container
     hostWorkspacePath: string;
     // Where that directory is mounted inside the container
     containerWorkspacePath: string;
   }) {
-    this.client = params.client;
+    this.client = params.client ?? null;
     this.containerId = params.containerId;
     this.hostWorkspacePath = resolve(params.hostWorkspacePath);
     this.containerWorkspacePath = params.containerWorkspacePath;
@@ -120,7 +126,10 @@ export class LocalDockerFilesystem implements Filesystem {
       : this.hostWorkspacePath;
     const containerCwd = this.toContainerPath(hostCwd);
 
-    const { Id: execId } = await this.client.containerExec(this.containerId, {
+    if (!this.client) throw new Error("No Docker client available — exec is not yet supported");
+    const client = this.client;
+
+    const { Id: execId } = await client.containerExec(this.containerId, {
       Cmd: ["bash", "-c", command],
       AttachStdout: true,
       AttachStderr: true,
@@ -142,11 +151,11 @@ export class LocalDockerFilesystem implements Filesystem {
     );
 
     await Promise.race([
-      this.client.execStart(execId, stdoutStream, stderrStream),
+      client.execStart(execId, stdoutStream, stderrStream),
       deadline,
     ]);
 
-    const inspect = await this.client.execInspect(execId);
+    const inspect = await client.execInspect(execId);
 
     return {
       stdout: Buffer.concat(stdoutChunks).toString(),

@@ -1,4 +1,3 @@
-import { DockerClient } from "@docker/node-sdk";
 import { Agent } from "../agent";
 import { LocalDockerFilesystem } from "../filesystem/local-docker";
 import { GitHubRepository } from "../code-repository/github";
@@ -7,11 +6,9 @@ import type { FleetStore } from "../store";
 export class AgentManager {
   private running = new Map<string, Agent>();
   private store: FleetStore;
-  private docker: DockerClient;
 
-  constructor(store: FleetStore, docker: DockerClient) {
+  constructor(store: FleetStore) {
     this.store = store;
-    this.docker = docker;
   }
 
   private async imageExists(image: string): Promise<boolean> {
@@ -50,6 +47,15 @@ export class AgentManager {
       throw new Error(`Docker image "${agentConfig.dockerImage}" not found locally. Build it first.`);
     }
 
+    const gitUrl = `https://${token}@github.com/${project.owner}/${project.repository}.git`;
+
+    const workspaceExists = await Bun.file(`${hostWorkspacePath}/.git/HEAD`).exists();
+    if (workspaceExists) {
+      await Bun.$`git -C ${hostWorkspacePath} pull`.quiet();
+    } else {
+      await Bun.$`git clone ${gitUrl} ${hostWorkspacePath}`.quiet();
+    }
+
     if (!await this.containerExists(containerId)) {
       await Bun.$`docker create --name ${containerId} -v ${hostWorkspacePath}:${agentConfig.filesystemMountPoint} ${agentConfig.dockerImage}`.quiet();
     }
@@ -57,7 +63,6 @@ export class AgentManager {
     await Bun.$`docker start ${containerId}`.quiet();
 
     const fs = new LocalDockerFilesystem({
-      client: this.docker,
       containerId,
       hostWorkspacePath,
       containerWorkspacePath: agentConfig.filesystemMountPoint,

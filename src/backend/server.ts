@@ -1,13 +1,11 @@
-import { DockerClient } from "@docker/node-sdk";
 import { SidekickIntegratedCovenantServer } from "@covenant-rpc/sidekick-bun-adapter";
 import { covenant } from "../covenant";
 import { FleetStore } from "../store";
 import { AgentManager } from "./agent-manager";
 
 export async function createServer(storeDirectory: string) {
-  const docker = await DockerClient.fromDockerConfig();
   const store = new FleetStore(storeDirectory);
-  const agents = new AgentManager(store, docker);
+  const agents = new AgentManager(store);
   await store.initialize();
 
   const server = new SidekickIntegratedCovenantServer(covenant, {
