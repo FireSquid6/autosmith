@@ -1,4 +1,4 @@
-import { DockerClient, Filter } from "@docker/node-sdk";
+import { DockerClient } from "@docker/node-sdk";
 import { Agent } from "../agent";
 import { LocalDockerFilesystem } from "../filesystem/local-docker";
 import { GitHubRepository } from "../code-repository/github";
@@ -12,6 +12,16 @@ export class AgentManager {
   constructor(store: FleetStore, docker: DockerClient) {
     this.store = store;
     this.docker = docker;
+  }
+
+  private async imageExists(image: string): Promise<boolean> {
+    const result = await Bun.$`docker image inspect ${image}`.quiet().catch(() => null);
+    return result !== null && result.exitCode === 0;
+  }
+
+  private async containerExists(id: string): Promise<boolean> {
+    const result = await Bun.$`docker container inspect ${id}`.quiet().catch(() => null);
+    return result !== null && result.exitCode === 0;
   }
 
   private key(projectName: string, agentName: string): string {
@@ -36,15 +46,11 @@ export class AgentManager {
     const containerId = this.containerId(projectName, agentName);
     const hostWorkspacePath = this.store.agentWorkspacePath(projectName, agentName);
 
-    const filter = new Filter().set("reference", [agentConfig.dockerImage]);
-    const matchingImages = await this.docker.imageList({ filters: filter });
-    if (!matchingImages.length) {
+    if (!await this.imageExists(agentConfig.dockerImage)) {
       throw new Error(`Docker image "${agentConfig.dockerImage}" not found locally. Build it first.`);
     }
 
-    const containerExists = await this.docker.containerInspect(containerId).then(() => true, () => false);
-
-    if (!containerExists) {
+    if (!await this.containerExists(containerId)) {
       await Bun.$`docker create --name ${containerId} -v ${hostWorkspacePath}:${agentConfig.filesystemMountPoint} ${agentConfig.dockerImage}`.quiet();
     }
 
