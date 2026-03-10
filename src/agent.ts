@@ -2,8 +2,10 @@ import { streamText, generateText, stepCountIs, type ModelMessage } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import type { CodeRepository } from "./code-repository";
 import type { Filesystem } from "./filesystem";
+import type { Skill, SkillStore } from "./store/skill";
 import { getToolkitFromFilesystem } from "./toolkits/filesystem";
 import { getToolkitFromCodeRepository } from "./toolkits/code-repository";
+import { getToolkitFromSkills } from "./toolkits/skills";
 
 export type AgentEvent =
   | { type: "text"; text: string }
@@ -16,6 +18,8 @@ export interface AgentInputs {
   fs: Filesystem;
   repo: CodeRepository;
   instructions?: string;
+  skills?: Skill[];
+  skillStore?: SkillStore;
 }
 
 export class Agent {
@@ -25,10 +29,10 @@ export class Agent {
 
   private systemPrompt: string;
 
-  constructor({ id, fs, repo, instructions }: AgentInputs) {
+  constructor({ id, fs, repo, instructions, skills, skillStore }: AgentInputs) {
     this.id = id;
-    this.tools = buildTools(fs, repo);
-    this.systemPrompt = instructions ?? "";
+    this.tools = buildTools(fs, repo, skills ?? [], skillStore);
+    this.systemPrompt = buildSystemPrompt(instructions, skills);
   }
 
   async *send(input: string): AsyncGenerator<AgentEvent> {
@@ -91,10 +95,30 @@ export class Agent {
   }
 }
 
-function buildTools(fs: Filesystem, repo: CodeRepository) {
+function buildSystemPrompt(instructions: string | undefined, skills: Skill[] | undefined): string {
+  const parts: string[] = [];
+
+  if (instructions?.trim()) parts.push(instructions.trim());
+
+  if (skills && skills.length > 0) {
+    const lines = [
+      "## Available Skills",
+      "",
+      "The following skills are available to you. Use the `skillRead` tool to load a skill's full instructions into your context before applying it.",
+      "",
+      ...skills.map(s => `- **${s.title}** (\`${s.name}\`): ${s.description}`),
+    ];
+    parts.push(lines.join("\n"));
+  }
+
+  return parts.join("\n\n");
+}
+
+function buildTools(fs: Filesystem, repo: CodeRepository, skills: Skill[], skillStore: SkillStore | undefined) {
   return {
     ...getToolkitFromFilesystem(fs),
     ...getToolkitFromCodeRepository(repo),
+    ...(skillStore ? getToolkitFromSkills(skillStore, skills.map(s => s.name)) : {}),
   };
 }
 

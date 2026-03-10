@@ -91,7 +91,11 @@ export class AgentManager {
       containerWorkspacePath: agentConfig.filesystemMountPoint,
     });
 
-    const agent = new Agent({ id: key, fs, repo, instructions });
+    const resolvedSkills = await Promise.all(
+      agentConfig.skills.map(name => this.store.skills.get(name)),
+    );
+
+    const agent = new Agent({ id: key, fs, repo, instructions, skills: resolvedSkills, skillStore: this.store.skills });
     this.running.set(key, agent);
   }
 

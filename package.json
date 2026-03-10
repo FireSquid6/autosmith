@@ -23,6 +23,7 @@
     "bun-plugin-tailwind": "^0.1.2",
     "commander-js": "^0.0.1-security",
     "daisyui": "^5.5.19",
+    "gray-matter": "^4.0.3",
     "react": "^19",
     "react-dom": "^19",
     "react-router": "^7.13.1",

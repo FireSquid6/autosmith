@@ -18,6 +18,8 @@ export const agentSchema = z.object({
   dockerImage: z.string().default("fleet/agent:latest"),
   // path where the workspace is mounted inside the container
   filesystemMountPoint: z.string().default("/workspace"),
+  // names of skills from the fleet skills/ directory to give this agent
+  skills: z.array(z.string()).default([]),
 });
 
 // API-layer schemas extend the base schemas with identifier fields

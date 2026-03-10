@@ -3,9 +3,11 @@ import { z } from "zod";
 import { join, resolve } from "node:path";
 import { mkdir, readdir, rm } from "node:fs/promises";
 import { TokenStore, mergeTokenFiles } from "./token";
+import { SkillStore } from "./skill";
 import { projectSchema, agentSchema } from "../covenant";
 
-export { TokenStore, projectSchema, agentSchema };
+export { TokenStore, SkillStore, projectSchema, agentSchema };
+export type { Skill } from "./skill";
 
 export type Project = z.infer<typeof projectSchema>;
 export type AgentConfig = z.infer<typeof agentSchema>;
@@ -31,16 +33,20 @@ export class FleetStore {
   readonly tokens: TokenStore;
   // AI provider keys (ANTHROPIC_API_KEY, etc.) — not exposed to agents
   readonly providers: TokenStore;
+  // Shared skill library
+  readonly skills: SkillStore;
 
   constructor(directory: string) {
     this.root = resolve(directory);
     this.tokens = new TokenStore(join(this.root, "tokens.yaml"));
     this.providers = new TokenStore(join(this.root, "providers.yaml"));
+    this.skills = new SkillStore(join(this.root, "skills"));
   }
 
   // Ensures the base directory structure exists. Call once on startup.
   async initialize(): Promise<void> {
     await mkdir(join(this.root, "projects"), { recursive: true });
+    await mkdir(join(this.root, "skills"), { recursive: true });
     const rootAgentMd = join(this.root, "AGENT.md");
     if (!(await Bun.file(rootAgentMd).exists())) {
       await Bun.write(rootAgentMd, ROOT_AGENT_MD_DEFAULT);
