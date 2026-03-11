@@ -2,7 +2,7 @@ import YAML from "yaml";
 import { z } from "zod";
 import { join, resolve } from "node:path";
 import { mkdir, readdir, rm } from "node:fs/promises";
-import { TokenStore, mergeTokenFiles } from "./token";
+import { TokenStore, mergeTokenFiles, readTokenFile } from "./token";
 import { SkillStore } from "./skill";
 import { projectSchema, agentSchema } from "../covenant";
 
@@ -70,6 +70,20 @@ export class AutosmithStore {
       join(this.projectDir(projectName), "tokens.yaml"),
       join(this.agentDir(projectName, agentName), "tokens.yaml"),
     );
+  }
+
+  // Returns each token scope separately so callers can show the inheritance chain.
+  async getLayeredAgentTokens(projectName: string, agentName: string): Promise<{
+    root: Record<string, string>;
+    project: Record<string, string>;
+    agent: Record<string, string>;
+  }> {
+    const [root, project, agent] = await Promise.all([
+      readTokenFile(join(this.root, "tokens.yaml")),
+      readTokenFile(join(this.projectDir(projectName), "tokens.yaml")),
+      readTokenFile(join(this.agentDir(projectName, agentName), "tokens.yaml")),
+    ]);
+    return { root, project, agent };
   }
 
   // ── Projects ──────────────────────────────────────────────────────────────

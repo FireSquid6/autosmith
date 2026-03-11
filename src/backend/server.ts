@@ -5,6 +5,7 @@ import { AgentManager } from "./agent-manager";
 import { registerProjectProcedures } from "./procedures/projects";
 import { registerAgentProcedures } from "./procedures/agents";
 import { registerLifecycleProcedures } from "./procedures/lifecycle";
+import { registerContentProcedures } from "./procedures/content";
 import { registerAgentSessionChannel } from "./channels/agent-session";
 
 export async function createServer(storeDirectory: string) {
@@ -21,6 +22,7 @@ export async function createServer(storeDirectory: string) {
   registerProjectProcedures(server, store);
   registerAgentProcedures(server, store);
   registerLifecycleProcedures(server, agents);
+  registerContentProcedures(server, store);
   registerAgentSessionChannel(server, agents);
 
   server.assertAllDefined();

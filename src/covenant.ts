@@ -55,6 +55,33 @@ export const covenant = declareCovenant({
     stopAgent: mutation({ input: AgentIdSchema, output: z.null() }),
     isAgentRunning: query({ input: AgentIdSchema, output: z.boolean() }),
 
+    // Content / instructions
+    getProjectInstructions: query({
+      input: z.object({ projectName: z.string() }),
+      output: z.string(),
+    }),
+    getAgentInstructions: query({
+      input: AgentIdSchema,
+      output: z.string(),
+    }),
+    getAgentTokens: query({
+      input: AgentIdSchema,
+      output: z.object({
+        root: z.record(z.string(), z.string()),
+        project: z.record(z.string(), z.string()),
+        agent: z.record(z.string(), z.string()),
+      }),
+    }),
+    getAgentSkills: query({
+      input: AgentIdSchema,
+      output: z.array(z.object({
+        name: z.string(),
+        title: z.string(),
+        description: z.string(),
+        content: z.string(),
+      })),
+    }),
+
     // History
     getAgentHistory: query({
       input: AgentIdSchema,
