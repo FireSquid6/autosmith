@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { PaperAirplaneIcon } from "@heroicons/react/24/solid";
+import { ArrowLeftIcon, PlayIcon } from "@heroicons/react/24/outline";
 import { client } from "../client";
 import ChatMessage, { type Message, type MessagePart, type ToolPart } from "../components/ChatMessage";
 
@@ -18,12 +19,15 @@ export default function AgentChat() {
   const [connectionError, setConnectionError] = useState<string>("");
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   const tokenRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const params = { projectName: projectName!, agentName: agentName! };
+
+  const [startAgent, { loading: isStarting }] = client.useMutation("startAgent");
 
   useEffect(() => {
     let active = true;
@@ -110,12 +114,17 @@ export default function AgentChat() {
       unsub?.();
       tokenRef.current = null;
     };
-  }, [projectName, agentName]);
+  }, [projectName, agentName, retryCount]);
 
   // Auto-scroll on new content
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingMessage]);
+
+  const handleStart = useCallback(async () => {
+    await startAgent(params);
+    setRetryCount((c) => c + 1);
+  }, [projectName, agentName]);
 
   const sendMessage = useCallback(async () => {
     const text = input.trim();
@@ -142,6 +151,13 @@ export default function AgentChat() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="px-6 py-4 border-b border-base-300 bg-base-100 flex items-center gap-3 shrink-0">
+        <Link
+          to={`/projects/${projectName}`}
+          className="btn btn-ghost btn-sm btn-square"
+          title="Back to project"
+        >
+          <ArrowLeftIcon className="w-4 h-4" />
+        </Link>
         <div>
           <h2 className="text-lg font-bold leading-tight">{agentName}</h2>
           <p className="text-xs text-base-content/50">{projectName}</p>
@@ -168,10 +184,22 @@ export default function AgentChat() {
         </div>
       </div>
 
-      {/* Error banner */}
+      {/* Error banner with start button */}
       {connectionState === "error" && (
-        <div className="alert alert-error rounded-none border-x-0 border-t-0">
+        <div className="alert alert-error rounded-none border-x-0 border-t-0 flex items-center justify-between">
           <span>{connectionError || "Could not connect to agent. Make sure it is running."}</span>
+          <button
+            className="btn btn-sm btn-neutral gap-1.5 shrink-0"
+            onClick={handleStart}
+            disabled={isStarting}
+          >
+            {isStarting ? (
+              <span className="loading loading-spinner loading-xs" />
+            ) : (
+              <PlayIcon className="w-4 h-4" />
+            )}
+            Start Agent
+          </button>
         </div>
       )}
 
