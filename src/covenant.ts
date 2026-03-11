@@ -15,10 +15,10 @@ export const projectSchema = z.object({
 export const agentSchema = z.object({
   name: z.string(),
   provider: z.string(),
-  dockerImage: z.string().default("fleet/agent:latest"),
+  dockerImage: z.string().default("autosmith/agent:latest"),
   // path where the workspace is mounted inside the container
   filesystemMountPoint: z.string().default("/workspace"),
-  // names of skills from the fleet skills/ directory to give this agent
+  // names of skills from the autosmith skills/ directory to give this agent
   skills: z.array(z.string()).default([]),
 });
 

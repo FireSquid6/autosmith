@@ -9,7 +9,7 @@ export default function Sidebar() {
     <aside className="w-56 shrink-0 bg-base-200 flex flex-col h-full border-r border-base-300">
       <div className="px-4 py-5 border-b border-base-300">
         <Link to="/" className="text-lg font-bold tracking-wide hover:text-primary transition-colors">
-          Fleet
+          Autosmith
         </Link>
       </div>
 

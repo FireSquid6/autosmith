@@ -38,7 +38,7 @@ export default function Project() {
       {agents?.length === 0 ? (
         <div className="text-center py-20 text-base-content/40">
           <p className="text-lg mb-1">No agents yet</p>
-          <p className="text-sm">Create an agent using the Fleet CLI to get started.</p>
+          <p className="text-sm">Create an agent using the Autosmith CLI to get started.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

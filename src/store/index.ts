@@ -15,7 +15,7 @@ export type AgentConfig = z.infer<typeof agentSchema>;
 // Directory layout:
 //
 //   {root}/
-//     providers.yaml        ← AI provider keys (ANTHROPIC_API_KEY, etc.) — Fleet server only
+//     providers.yaml        ← AI provider keys (ANTHROPIC_API_KEY, etc.) — Autosmith server only
 //     tokens.yaml           ← global tokens available to all agents
 //     projects/
 //       {project}/
@@ -27,7 +27,7 @@ export type AgentConfig = z.infer<typeof agentSchema>;
 //           AGENT.md
 //           workspace/
 
-export class FleetStore {
+export class AutosmithStore {
   private root: string;
   // Root-level tokens available to all agents
   readonly tokens: TokenStore;

@@ -1,10 +1,10 @@
 import { SidekickIntegratedCovenantServer } from "@covenant-rpc/sidekick-bun-adapter";
 import { covenant } from "../covenant";
-import { FleetStore } from "../store";
+import { AutosmithStore } from "../store";
 import { AgentManager } from "./agent-manager";
 
 export async function createServer(storeDirectory: string) {
-  const store = new FleetStore(storeDirectory);
+  const store = new AutosmithStore(storeDirectory);
   const agents = new AgentManager(store);
   await store.initialize();
 

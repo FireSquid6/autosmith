@@ -1,13 +1,13 @@
 import { Agent } from "../agent";
 import { LocalDockerFilesystem } from "../filesystem/local-docker";
 import { GitHubRepository } from "../code-repository/github";
-import type { FleetStore } from "../store";
+import type { AutosmithStore } from "../store";
 
 export class AgentManager {
   private running = new Map<string, Agent>();
-  private store: FleetStore;
+  private store: AutosmithStore;
 
-  constructor(store: FleetStore) {
+  constructor(store: AutosmithStore) {
     this.store = store;
   }
 
@@ -19,7 +19,7 @@ export class AgentManager {
   // Writes a git credential store file into the container and configures git to use it,
   // so any git command the agent runs against that provider's host is authenticated.
   private async configureGitCredentials(containerId: string, credentialEntry: string): Promise<void> {
-    const tmpPath = `/tmp/fleet-git-creds-${containerId}`;
+    const tmpPath = `/tmp/autosmith-git-creds-${containerId}`;
     await Bun.write(tmpPath, credentialEntry + "\n");
     try {
       await Bun.$`docker cp ${tmpPath} ${containerId}:/root/.git-credentials`.quiet();
@@ -39,7 +39,7 @@ export class AgentManager {
   }
 
   private containerId(projectName: string, agentName: string): string {
-    return `fleet-${projectName}-${agentName}`;
+    return `autosmith-${projectName}-${agentName}`;
   }
 
   async start(projectName: string, agentName: string): Promise<void> {
