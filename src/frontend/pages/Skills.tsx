@@ -46,7 +46,7 @@ export default function Skills() {
       <div className="mb-8">
         <h1 className="text-2xl font-bold">Skills</h1>
         <p className="text-base-content/50 text-sm mt-1">
-          Reusable instruction sets available to assign to agents.
+          Reusable instruction sets available to assign to agents. You'll have to manually create these in your filesystem.
         </p>
       </div>
 

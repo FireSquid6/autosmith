@@ -110,6 +110,19 @@ export default function Project() {
         )}
       </section>
 
+      {/* Project AGENT.md */}
+      <section>
+        <h2 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-4">
+          Project Instructions
+        </h2>
+        <InstructionsEditor
+          content={instructions}
+          loading={instructionsLoading}
+          onSave={(content) => setProjectInstructions({ projectName: projectName!, content })}
+        />
+      </section>
+
+
       {/* Tokens */}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div>
@@ -134,18 +147,6 @@ export default function Project() {
             onDelete={(name) => deleteRootToken({ name })}
           />
         </div>
-      </section>
-
-      {/* Project AGENT.md */}
-      <section>
-        <h2 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-4">
-          Project Instructions
-        </h2>
-        <InstructionsEditor
-          content={instructions}
-          loading={instructionsLoading}
-          onSave={(content) => setProjectInstructions({ projectName: projectName!, content })}
-        />
       </section>
     </div>
   );
