@@ -1,16 +1,42 @@
+import { useState, useEffect } from "react";
 import { NavLink, Link } from "react-router-dom";
-import { Cog6ToothIcon, PlusIcon } from "@heroicons/react/24/outline";
+import { Cog6ToothIcon, PlusIcon, SunIcon, MoonIcon } from "@heroicons/react/24/outline";
 import { client } from "../client";
+
+const STORAGE_KEY = "autosmith-theme";
+
+function ThemeSwitcher() {
+  const [dark, setDark] = useState<boolean>(
+    () => (localStorage.getItem(STORAGE_KEY) ?? "forest-dark") === "forest-dark"
+  );
+
+  useEffect(() => {
+    const theme = dark ? "forest-dark" : "forest-light";
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem(STORAGE_KEY, theme);
+  }, [dark]);
+
+  return (
+    <button
+      className="btn btn-ghost btn-xs btn-square"
+      onClick={() => setDark((d) => !d)}
+      title={dark ? "Switch to light" : "Switch to dark"}
+    >
+      {dark ? <SunIcon className="w-4 h-4" /> : <MoonIcon className="w-4 h-4" />}
+    </button>
+  );
+}
 
 export default function Sidebar() {
   const { data: projects, loading } = client.useListenedQuery("listProjects", null);
 
   return (
     <aside className="w-56 shrink-0 bg-base-200 flex flex-col h-full border-r border-base-300">
-      <div className="px-4 py-5 border-b border-base-300">
+      <div className="px-4 py-5 border-b border-base-300 flex items-center justify-between">
         <Link to="/" className="text-lg font-bold tracking-wide hover:text-primary transition-colors">
           Autosmith
         </Link>
+        <ThemeSwitcher />
       </div>
 
       <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
