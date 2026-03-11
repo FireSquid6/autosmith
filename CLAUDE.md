@@ -1,6 +1,6 @@
 # Project Architecture
 
-Fleet is an AI agent management system. Users create **Projects** (a git repo + Docker image), assign **Agents** to them, and interact with agents over live sessions. Each agent runs inside a Docker container with a cloned git workspace.
+Autosmith is an AI agent management system. Users create **Projects** (a git repo + Docker image), assign **Agents** to them, and interact with agents over live sessions. Each agent runs inside a Docker container with a cloned git workspace.
 
 ## Data Model (`src/covenant.ts`)
 
@@ -16,7 +16,7 @@ projectSchema = {
 agentSchema = {
   name: string,
   provider: string,          // AI model provider
-  dockerImage: string,       // default: "fleet/agent:latest"
+  dockerImage: string,       // default: "autosmith/agent:latest"
   filesystemMountPoint: string, // default: "/workspace"
   skills: string[],          // skill directory names from {root}/skills/
 }
@@ -28,12 +28,12 @@ Channel: `agentSession` — bidirectional streaming session with a running agent
 
 ## Store Directory Layout
 
-All persistent state lives under the fleet data directory (default `./fleet-data`):
+All persistent state lives under the autosmith data directory (default `./autosmith-data`):
 
 ```
 {root}/
   AGENT.md              ← default system prompt (written on first start)
-  providers.yaml        ← AI provider keys: ANTHROPIC_API_KEY, etc. (Fleet server only)
+  providers.yaml        ← AI provider keys: ANTHROPIC_API_KEY, etc. (Autosmith server only)
   tokens.yaml           ← global git/service tokens available to all agents
   skills/
     {skill-name}/
@@ -54,7 +54,7 @@ All persistent state lives under the fleet data directory (default `./fleet-data
 ```
 
 **Key store classes** (`src/store/`):
-- `FleetStore` — top-level store; exposes `tokens`, `providers`, `skills: SkillStore`
+- `AutosmithStore` — top-level store; exposes `tokens`, `providers`, `skills: SkillStore`
 - `TokenStore` — read/write a single `tokens.yaml` file
 - `SkillStore` — list/get skills, read files within a skill directory
 
@@ -69,13 +69,13 @@ All persistent state lives under the fleet data directory (default `./fleet-data
 1. Resolve tokens and load project/agent config
 2. Construct the `CodeRepository` (currently `GitHubRepository`) — used for git URLs and auth
 3. Clone the repo into `workspace/` on the host (or `git pull` + refresh remote URL if it already exists)
-4. Create the Docker container if it doesn't exist: `docker create --name fleet-{project}-{agent} -v {workspace}:{mountPoint} {image}`
+4. Create the Docker container if it doesn't exist: `docker create --name autosmith-{project}-{agent} -v {workspace}:{mountPoint} {image}`
 5. Start the container: `docker start`
 6. Write `~/.git-credentials` into the container via `docker cp` and set `credential.helper store` — authenticates all git commands the agent runs
 7. Resolve and load assigned skills
 8. Construct `Agent` with merged instructions, resolved skills, filesystem, and repo
 
-Container ID is always `fleet-{projectName}-{agentName}` — never stored in config.
+Container ID is always `autosmith-{projectName}-{agentName}` — never stored in config.
 
 ## `CodeRepository` Interface (`src/code-repository/index.ts`)
 
@@ -106,7 +106,7 @@ Assign skills to an agent via `skills: [name1, name2]` in `agent.yaml`. At start
 
 `@docker/node-sdk` is broken in Bun — it uses undici's `dispatcher` option which Bun silently ignores, causing all API calls to fail with `ConnectionRefused` on `localhost:2375`. All Docker operations use `Bun.$\`docker ...\`` CLI calls instead. The exec API (`LocalDockerFilesystem.runCommand`) still uses a stub client type and will throw until a Bun-compatible replacement is built (see `~/docker-sdk.md`).
 
-The default Docker image is `fleet/agent:latest`. Build it with: `docker build -t fleet/agent:latest .` (Dockerfile at project root).
+The default Docker image is `autosmith/agent:latest`. Build it with: `docker build -t autosmith/agent:latest .` (Dockerfile at project root).
 
 # General Guidelines
 - This project uses daisyUI for the frontend

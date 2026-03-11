@@ -132,7 +132,7 @@ const agentCreateCommand = new Command()
   .requiredOption("--project <projectName>", "project name")
   .requiredOption("--name <name>", "agent name")
   .requiredOption("--provider <provider>", "model provider")
-  .option("--docker-image <dockerImage>", "docker image", "fleet/agent:latest")
+  .option("--docker-image <dockerImage>", "docker image", "autosmith/agent:latest")
   .option(
     "--filesystem-mount-point <filesystemMountPoint>",
     "path where workspace is mounted",
@@ -276,8 +276,8 @@ const sessionCommand = new Command()
 
 export const clientCommand = new Command()
   .name("client")
-  .description("Interact with a Fleet server from the CLI")
-  .option("--url <url>", "Fleet server URL", "http://localhost:4456")
+  .description("Interact with an Autosmith server from the CLI")
+  .option("--url <url>", "Autosmith server URL", "http://localhost:4456")
   .addCommand(projectCommand)
   .addCommand(agentCommand)
   .addCommand(startCommand)

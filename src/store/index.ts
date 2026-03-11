@@ -2,7 +2,7 @@ import YAML from "yaml";
 import { z } from "zod";
 import { join, resolve } from "node:path";
 import { mkdir, readdir, rm } from "node:fs/promises";
-import { TokenStore, mergeTokenFiles } from "./token";
+import { TokenStore, mergeTokenFiles, readTokenFile } from "./token";
 import { SkillStore } from "./skill";
 import { projectSchema, agentSchema } from "../covenant";
 
@@ -15,7 +15,7 @@ export type AgentConfig = z.infer<typeof agentSchema>;
 // Directory layout:
 //
 //   {root}/
-//     providers.yaml        ← AI provider keys (ANTHROPIC_API_KEY, etc.) — Fleet server only
+//     providers.yaml        ← AI provider keys (ANTHROPIC_API_KEY, etc.) — Autosmith server only
 //     tokens.yaml           ← global tokens available to all agents
 //     projects/
 //       {project}/
@@ -27,7 +27,7 @@ export type AgentConfig = z.infer<typeof agentSchema>;
 //           AGENT.md
 //           workspace/
 
-export class FleetStore {
+export class AutosmithStore {
   private root: string;
   // Root-level tokens available to all agents
   readonly tokens: TokenStore;
@@ -70,6 +70,20 @@ export class FleetStore {
       join(this.projectDir(projectName), "tokens.yaml"),
       join(this.agentDir(projectName, agentName), "tokens.yaml"),
     );
+  }
+
+  // Returns each token scope separately so callers can show the inheritance chain.
+  async getLayeredAgentTokens(projectName: string, agentName: string): Promise<{
+    root: Record<string, string>;
+    project: Record<string, string>;
+    agent: Record<string, string>;
+  }> {
+    const [root, project, agent] = await Promise.all([
+      readTokenFile(join(this.root, "tokens.yaml")),
+      readTokenFile(join(this.projectDir(projectName), "tokens.yaml")),
+      readTokenFile(join(this.agentDir(projectName, agentName), "tokens.yaml")),
+    ]);
+    return { root, project, agent };
   }
 
   // ── Projects ──────────────────────────────────────────────────────────────
@@ -134,7 +148,7 @@ export class FleetStore {
   // ── Instructions (AGENT.md) ───────────────────────────────────────────────
 
   async getRootInstructions(): Promise<string> {
-    return Bun.file(join(this.root, "AGENT.md")).text();
+    return Bun.file(join(this.root, "AGENT.md")).text().catch(() => "");
   }
 
   async setRootInstructions(instructions: string): Promise<void> {
@@ -142,7 +156,7 @@ export class FleetStore {
   }
 
   async getProjectInstructions(projectName: string): Promise<string> {
-    return Bun.file(join(this.projectDir(projectName), "AGENT.md")).text();
+    return Bun.file(join(this.projectDir(projectName), "AGENT.md")).text().catch(() => "");
   }
 
   async setProjectInstructions(projectName: string, instructions: string): Promise<void> {
@@ -150,7 +164,7 @@ export class FleetStore {
   }
 
   async getAgentInstructions(projectName: string, agentName: string): Promise<string> {
-    return Bun.file(join(this.agentDir(projectName, agentName), "AGENT.md")).text();
+    return Bun.file(join(this.agentDir(projectName, agentName), "AGENT.md")).text().catch(() => "");
   }
 
   async setAgentInstructions(projectName: string, agentName: string, instructions: string): Promise<void> {
@@ -172,6 +186,16 @@ export class FleetStore {
   // Absolute path to the agent's workspace on the host
   agentWorkspacePath(projectName: string, agentName: string): string {
     return join(this.agentDir(projectName, agentName), "workspace");
+  }
+
+  agentSessionPath(projectName: string, agentName: string): string {
+    return join(this.agentDir(projectName, agentName), "session.json");
+  }
+
+  async readAgentSession(projectName: string, agentName: string): Promise<import("../agent").AgentSession | undefined> {
+    const file = Bun.file(this.agentSessionPath(projectName, agentName));
+    if (!(await file.exists())) return undefined;
+    return file.json();
   }
 
   private projectDir(name: string): string {

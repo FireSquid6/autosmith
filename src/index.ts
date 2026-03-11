@@ -5,10 +5,10 @@ import { clientCommand } from "./cli/client";
 const serveCommand = new Command()
   .name("serve")
   .option("-p, --port [port]", "port to listen on", "4456")
-  .option("-d, --dir [dir]", "store directory", "./fleet-data")
+  .option("-d, --dir [dir]", "store directory", "./autosmith-data")
   .action(({ port: portString, dir }) => {
     const port = typeof portString === "string" ? parseInt(portString) : 4456;
-    const storeDirectory = typeof dir === "string" ? dir : "./fleet-data";
+    const storeDirectory = typeof dir === "string" ? dir : "./autosmith-data";
     startServer({ port, storeDirectory });
   });
 

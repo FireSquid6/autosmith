@@ -1,13 +1,13 @@
 import { Agent } from "../agent";
 import { LocalDockerFilesystem } from "../filesystem/local-docker";
 import { GitHubRepository } from "../code-repository/github";
-import type { FleetStore } from "../store";
+import type { AutosmithStore } from "../store";
 
 export class AgentManager {
   private running = new Map<string, Agent>();
-  private store: FleetStore;
+  private store: AutosmithStore;
 
-  constructor(store: FleetStore) {
+  constructor(store: AutosmithStore) {
     this.store = store;
   }
 
@@ -19,7 +19,7 @@ export class AgentManager {
   // Writes a git credential store file into the container and configures git to use it,
   // so any git command the agent runs against that provider's host is authenticated.
   private async configureGitCredentials(containerId: string, credentialEntry: string): Promise<void> {
-    const tmpPath = `/tmp/fleet-git-creds-${containerId}`;
+    const tmpPath = `/tmp/autosmith-git-creds-${containerId}`;
     await Bun.write(tmpPath, credentialEntry + "\n");
     try {
       await Bun.$`docker cp ${tmpPath} ${containerId}:/root/.git-credentials`.quiet();
@@ -39,7 +39,7 @@ export class AgentManager {
   }
 
   private containerId(projectName: string, agentName: string): string {
-    return `fleet-${projectName}-${agentName}`;
+    return `autosmith-${projectName}-${agentName}`;
   }
 
   async start(projectName: string, agentName: string): Promise<void> {
@@ -91,11 +91,21 @@ export class AgentManager {
       containerWorkspacePath: agentConfig.filesystemMountPoint,
     });
 
-    const resolvedSkills = await Promise.all(
-      agentConfig.skills.map(name => this.store.skills.get(name)),
-    );
+    const [resolvedSkills, session] = await Promise.all([
+      Promise.all(agentConfig.skills.map(name => this.store.skills.get(name))),
+      this.store.readAgentSession(projectName, agentName),
+    ]);
 
-    const agent = new Agent({ id: key, fs, repo, instructions, skills: resolvedSkills, skillStore: this.store.skills });
+    const agent = new Agent({
+      id: key,
+      fs,
+      repo,
+      sessionPath: this.store.agentSessionPath(projectName, agentName),
+      session,
+      instructions,
+      skills: resolvedSkills,
+      skillStore: this.store.skills,
+    });
     this.running.set(key, agent);
   }
 
@@ -111,6 +121,12 @@ export class AgentManager {
 
   isRunning(projectName: string, agentName: string): boolean {
     return this.running.has(this.key(projectName, agentName));
+  }
+
+  getStatus(projectName: string, agentName: string): "stopped" | "idle" | "running" {
+    const agent = this.get(projectName, agentName);
+    if (!agent) return "stopped";
+    return agent.isGenerating ? "running" : "idle";
   }
 
   async stopAll(): Promise<void> {

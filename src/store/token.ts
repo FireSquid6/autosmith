@@ -50,4 +50,8 @@ export class TokenStore {
     const data = await readTokenFile(this.path);
     return Object.keys(data);
   }
+
+  async readAll(): Promise<Record<string, string>> {
+    return readTokenFile(this.path);
+  }
 }
