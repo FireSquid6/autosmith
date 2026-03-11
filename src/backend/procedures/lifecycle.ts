@@ -1,7 +1,8 @@
 import type { AppServer } from "../server-types";
 import type { AgentManager } from "../agent-manager";
+import type { AutosmithStore } from "../../store";
 
-export function registerLifecycleProcedures(server: AppServer, agents: AgentManager) {
+export function registerLifecycleProcedures(server: AppServer, agents: AgentManager, store: AutosmithStore) {
   server.defineProcedure("startAgent", {
     resources: ({ inputs }) => [`agent/${inputs.projectName}/${inputs.agentName}/status`],
     procedure: async ({ inputs }) => {
@@ -23,12 +24,18 @@ export function registerLifecycleProcedures(server: AppServer, agents: AgentMana
     procedure: ({ inputs }) => agents.isRunning(inputs.projectName, inputs.agentName),
   });
 
+  server.defineProcedure("getAgentStatus", {
+    resources: ({ inputs }) => [`agent/${inputs.projectName}/${inputs.agentName}/status`],
+    procedure: ({ inputs }) => agents.getStatus(inputs.projectName, inputs.agentName),
+  });
+
   server.defineProcedure("getAgentHistory", {
     resources: ({ inputs }) => [`agent/${inputs.projectName}/${inputs.agentName}/history`],
-    procedure: ({ inputs, error }) => {
+    procedure: async ({ inputs }) => {
       const agent = agents.get(inputs.projectName, inputs.agentName);
-      if (!agent) error("Agent is not running", 404);
-      return agent!.getHistory();
+      if (agent) return agent.getHistory();
+      const session = await store.readAgentSession(inputs.projectName, inputs.agentName);
+      return session?.history ?? [];
     },
   });
 }

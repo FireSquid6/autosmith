@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useParams } from "react-router-dom";
-import { PaperAirplaneIcon, EyeIcon, EyeSlashIcon } from "@heroicons/react/24/solid";
+import { PaperAirplaneIcon } from "@heroicons/react/24/solid";
 import { ArrowLeftIcon, PlayIcon } from "@heroicons/react/24/outline";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { client } from "../client";
 import ChatMessage, { type Message, type MessagePart, type ToolPart } from "../components/ChatMessage";
+import TokenManager from "../components/TokenManager";
+import InstructionsEditor from "../components/InstructionsEditor";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -28,21 +30,16 @@ function historyToMessages(history: { role: "user" | "assistant"; parts: { type:
 // ── Tab content components ────────────────────────────────────────────────────
 
 function AgentFileTab({ projectName, agentName }: { projectName: string; agentName: string }) {
-  const { data: instructions, loading } = client.useQuery("getAgentInstructions", { projectName, agentName });
-
-  if (loading) return <div className="flex justify-center py-12"><span className="loading loading-spinner" /></div>;
+  const { data: instructions, loading } = client.useListenedQuery("getAgentInstructions", { projectName, agentName });
+  const [setAgentInstructions] = client.useMutation("setAgentInstructions");
 
   return (
     <div className="p-6">
-      <div className="bg-base-200 border border-base-300 rounded-xl p-6">
-        {instructions?.trim() ? (
-          <div className="prose prose-sm max-w-none">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{instructions}</ReactMarkdown>
-          </div>
-        ) : (
-          <p className="text-base-content/40 italic text-sm">No agent-level instructions set.</p>
-        )}
-      </div>
+      <InstructionsEditor
+        content={instructions}
+        loading={loading}
+        onSave={(content) => setAgentInstructions({ projectName, agentName, content })}
+      />
     </div>
   );
 }
@@ -95,128 +92,44 @@ function SkillsTab({ projectName, agentName }: { projectName: string; agentName:
 
 
 function TokensTab({ projectName, agentName }: { projectName: string; agentName: string }) {
-  const { data: tokens, loading } = client.useQuery("getAgentTokens", { projectName, agentName });
+  const { data: tokens, loading } = client.useListenedQuery("getAgentTokens", { projectName, agentName });
 
-  if (loading) return <div className="flex justify-center py-12"><span className="loading loading-spinner" /></div>;
-
-  const sections: { key: "root" | "project" | "agent"; label: string }[] = [
-    { key: "root", label: "Root" },
-    { key: "project", label: "Project" },
-    { key: "agent", label: "Agent" },
-  ];
-
-  // Compute the effective value for each token name across all scopes
-  const allKeys = new Set([
-    ...Object.keys(tokens?.root ?? {}),
-    ...Object.keys(tokens?.project ?? {}),
-    ...Object.keys(tokens?.agent ?? {}),
-  ]);
-
-  // Effective resolved view: each token name maps to which scope wins
-  const resolved: { name: string; value: string; source: string }[] = [];
-  for (const name of allKeys) {
-    if (tokens?.agent[name] !== undefined) {
-      resolved.push({ name, value: tokens.agent[name], source: "agent" });
-    } else if (tokens?.project[name] !== undefined) {
-      resolved.push({ name, value: tokens.project[name], source: "project" });
-    } else if (tokens?.root[name] !== undefined) {
-      resolved.push({ name, value: tokens.root[name], source: "root" });
-    }
-  }
+  const [setAgentToken] = client.useMutation("setAgentToken");
+  const [deleteAgentToken] = client.useMutation("deleteAgentToken");
+  const [setProjectToken] = client.useMutation("setProjectToken");
+  const [deleteProjectToken] = client.useMutation("deleteProjectToken");
+  const [setRootToken] = client.useMutation("setRootToken");
+  const [deleteRootToken] = client.useMutation("deleteRootToken");
 
   return (
-    <div className="p-6 space-y-8">
-      {/* Resolved view */}
-      {resolved.length > 0 && (
-        <div>
-          <h3 className="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-3">
-            Effective Tokens
-          </h3>
-          <div className="bg-base-200 border border-base-300 rounded-xl overflow-hidden">
-            <table className="w-full px-4 py-2">
-              <tbody className="divide-y divide-base-300">
-                {resolved.map(({ name, value, source }) => (
-                  <tr key={name} className="px-4">
-                    <td className="font-mono text-sm py-2.5 pl-4 pr-4 text-base-content/80">{name}</td>
-                    <td className="py-2.5 pr-4">
-                      <RevealCell value={value} />
-                    </td>
-                    <td className="py-2.5 pr-4">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        source === "agent" ? "bg-primary/15 text-primary" :
-                        source === "project" ? "bg-secondary/15 text-secondary" :
-                        "bg-base-300 text-base-content/50"
-                      }`}>
-                        {source}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Per-scope breakdown */}
+    <div className="p-6 space-y-6">
       <div>
-        <h3 className="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-3">
-          By Scope
-        </h3>
-        <div className="space-y-4">
-          {sections.map(({ key, label }) => {
-            const entries = Object.entries(tokens?.[key] ?? {});
-            return (
-              <div key={key}>
-                <p className="text-sm font-medium text-base-content/70 mb-2">{label}</p>
-                {entries.length === 0 ? (
-                  <p className="text-sm text-base-content/30 italic pl-1">None</p>
-                ) : (
-                  <div className="bg-base-200 border border-base-300 rounded-xl overflow-hidden">
-                    <table className="w-full">
-                      <tbody className="divide-y divide-base-300">
-                        {entries.map(([name, value]) => (
-                          <tr key={name}>
-                            <td className="font-mono text-sm py-2.5 pl-4 pr-4 text-base-content/80">{name}</td>
-                            <td className="py-2.5 pr-4">
-                              <RevealCell value={value} />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        <h3 className="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-3">Agent</h3>
+        <TokenManager
+          tokens={tokens?.agent}
+          loading={loading}
+          onSet={(name, value) => setAgentToken({ projectName, agentName, name, value })}
+          onDelete={(name) => deleteAgentToken({ projectName, agentName, name })}
+        />
       </div>
-
-      {resolved.length === 0 && (
-        <p className="text-center text-base-content/40 italic text-sm py-8">No tokens configured.</p>
-      )}
-    </div>
-  );
-}
-
-function RevealCell({ value }: { value: string }) {
-  const [revealed, setRevealed] = useState(false);
-  return (
-    <div className="flex items-center gap-2">
-      <span className="font-mono text-sm text-base-content/60">
-        {revealed ? value : "•".repeat(Math.min(value.length, 24))}
-      </span>
-      <button
-        className="text-base-content/30 hover:text-base-content/70 transition-colors"
-        onClick={() => setRevealed((v) => !v)}
-        title={revealed ? "Hide" : "Reveal"}
-      >
-        {revealed
-          ? <EyeSlashIcon className="w-3.5 h-3.5" />
-          : <EyeIcon className="w-3.5 h-3.5" />
-        }
-      </button>
+      <div>
+        <h3 className="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-3">Project</h3>
+        <TokenManager
+          tokens={tokens?.project}
+          loading={loading}
+          onSet={(name, value) => setProjectToken({ projectName, name, value })}
+          onDelete={(name) => deleteProjectToken({ projectName, name })}
+        />
+      </div>
+      <div>
+        <h3 className="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-3">Root</h3>
+        <TokenManager
+          tokens={tokens?.root}
+          loading={loading}
+          onSet={(name, value) => setRootToken({ name, value })}
+          onDelete={(name) => deleteRootToken({ name })}
+        />
+      </div>
     </div>
   );
 }

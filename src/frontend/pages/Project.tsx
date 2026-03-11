@@ -1,9 +1,9 @@
 import { Link, useParams } from "react-router-dom";
 import { ArrowTopRightOnSquareIcon, PlusIcon } from "@heroicons/react/24/outline";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { client } from "../client";
 import AgentCard from "../components/AgentCard";
+import TokenManager from "../components/TokenManager";
+import InstructionsEditor from "../components/InstructionsEditor";
 
 function getRepoUrl(provider: string, owner: string, repository: string): string {
   if (provider === "github") return `https://github.com/${owner}/${repository}`;
@@ -18,9 +18,19 @@ export default function Project() {
   const { data: agents, loading, error } = client.useListenedQuery("listAgents", {
     projectName: projectName!,
   });
-  const { data: instructions } = client.useQuery("getProjectInstructions", {
+  const { data: instructions, loading: instructionsLoading } = client.useListenedQuery("getProjectInstructions", {
     projectName: projectName!,
   });
+  const [setProjectInstructions] = client.useMutation("setProjectInstructions");
+  const { data: rootTokens, loading: rootTokensLoading } = client.useListenedQuery("getRootTokens", null);
+  const { data: projectTokens, loading: projectTokensLoading } = client.useListenedQuery("getProjectTokens", {
+    projectName: projectName!,
+  });
+
+  const [setRootToken] = client.useMutation("setRootToken");
+  const [deleteRootToken] = client.useMutation("deleteRootToken");
+  const [setProjectToken] = client.useMutation("setProjectToken");
+  const [deleteProjectToken] = client.useMutation("deleteProjectToken");
 
   if (loading) {
     return (
@@ -100,22 +110,42 @@ export default function Project() {
         )}
       </section>
 
+      {/* Tokens */}
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>
+          <h2 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-4">
+            Project Tokens
+          </h2>
+          <TokenManager
+            tokens={projectTokens}
+            loading={projectTokensLoading}
+            onSet={(name, value) => setProjectToken({ projectName: projectName!, name, value })}
+            onDelete={(name) => deleteProjectToken({ projectName: projectName!, name })}
+          />
+        </div>
+        <div>
+          <h2 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-4">
+            Root Tokens
+          </h2>
+          <TokenManager
+            tokens={rootTokens}
+            loading={rootTokensLoading}
+            onSet={(name, value) => setRootToken({ name, value })}
+            onDelete={(name) => deleteRootToken({ name })}
+          />
+        </div>
+      </section>
+
       {/* Project AGENT.md */}
       <section>
         <h2 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-4">
-          Project Instructions (AGENT.md)
+          Project Instructions
         </h2>
-        <div className="bg-base-200 border border-base-300 rounded-xl p-6">
-          {instructions?.trim() ? (
-            <div className="prose prose-sm max-w-none">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{instructions}</ReactMarkdown>
-            </div>
-          ) : (
-            <p className="text-base-content/40 italic text-sm">
-              No project-level instructions set.
-            </p>
-          )}
-        </div>
+        <InstructionsEditor
+          content={instructions}
+          loading={instructionsLoading}
+          onSave={(content) => setProjectInstructions({ projectName: projectName!, content })}
+        />
       </section>
     </div>
   );

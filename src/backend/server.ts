@@ -21,7 +21,7 @@ export async function createServer(storeDirectory: string) {
 
   registerProjectProcedures(server, store);
   registerAgentProcedures(server, store);
-  registerLifecycleProcedures(server, agents);
+  registerLifecycleProcedures(server, agents, store);
   registerContentProcedures(server, store);
   registerAgentSessionChannel(server, agents);
 

@@ -54,8 +54,44 @@ export const covenant = declareCovenant({
     startAgent: mutation({ input: AgentIdSchema, output: z.null() }),
     stopAgent: mutation({ input: AgentIdSchema, output: z.null() }),
     isAgentRunning: query({ input: AgentIdSchema, output: z.boolean() }),
+    getAgentStatus: query({
+      input: AgentIdSchema,
+      output: z.enum(["stopped", "idle", "running"]),
+    }),
 
-    // Content / instructions
+    // Tokens — read
+    getRootTokens: query({ input: z.null(), output: z.record(z.string(), z.string()) }),
+    getProjectTokens: query({
+      input: z.object({ projectName: z.string() }),
+      output: z.record(z.string(), z.string()),
+    }),
+
+    // Tokens — write (root)
+    setRootToken: mutation({ input: z.object({ name: z.string(), value: z.string() }), output: z.null() }),
+    deleteRootToken: mutation({ input: z.object({ name: z.string() }), output: z.null() }),
+
+    // Tokens — write (project)
+    setProjectToken: mutation({
+      input: z.object({ projectName: z.string(), name: z.string(), value: z.string() }),
+      output: z.null(),
+    }),
+    deleteProjectToken: mutation({
+      input: z.object({ projectName: z.string(), name: z.string() }),
+      output: z.null(),
+    }),
+
+    // Tokens — write (agent)
+    setAgentToken: mutation({
+      input: AgentIdSchema.extend({ name: z.string(), value: z.string() }),
+      output: z.null(),
+    }),
+    deleteAgentToken: mutation({
+      input: AgentIdSchema.extend({ name: z.string() }),
+      output: z.null(),
+    }),
+
+    // Instructions — read
+    getRootInstructions: query({ input: z.null(), output: z.string() }),
     getProjectInstructions: query({
       input: z.object({ projectName: z.string() }),
       output: z.string(),
@@ -63,6 +99,17 @@ export const covenant = declareCovenant({
     getAgentInstructions: query({
       input: AgentIdSchema,
       output: z.string(),
+    }),
+
+    // Instructions — write
+    setRootInstructions: mutation({ input: z.object({ content: z.string() }), output: z.null() }),
+    setProjectInstructions: mutation({
+      input: z.object({ projectName: z.string(), content: z.string() }),
+      output: z.null(),
+    }),
+    setAgentInstructions: mutation({
+      input: AgentIdSchema.extend({ content: z.string() }),
+      output: z.null(),
     }),
     getAgentTokens: query({
       input: AgentIdSchema,

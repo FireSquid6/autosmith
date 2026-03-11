@@ -22,7 +22,7 @@ export function registerAgentSessionChannel(server: AppServer, agents: AgentMana
       }
 
       if (inputs.type === "clear") {
-        agent.clear();
+        await agent.clear();
         return;
       }
 

@@ -91,11 +91,21 @@ export class AgentManager {
       containerWorkspacePath: agentConfig.filesystemMountPoint,
     });
 
-    const resolvedSkills = await Promise.all(
-      agentConfig.skills.map(name => this.store.skills.get(name)),
-    );
+    const [resolvedSkills, session] = await Promise.all([
+      Promise.all(agentConfig.skills.map(name => this.store.skills.get(name))),
+      this.store.readAgentSession(projectName, agentName),
+    ]);
 
-    const agent = new Agent({ id: key, fs, repo, instructions, skills: resolvedSkills, skillStore: this.store.skills });
+    const agent = new Agent({
+      id: key,
+      fs,
+      repo,
+      sessionPath: this.store.agentSessionPath(projectName, agentName),
+      session,
+      instructions,
+      skills: resolvedSkills,
+      skillStore: this.store.skills,
+    });
     this.running.set(key, agent);
   }
 
@@ -111,6 +121,12 @@ export class AgentManager {
 
   isRunning(projectName: string, agentName: string): boolean {
     return this.running.has(this.key(projectName, agentName));
+  }
+
+  getStatus(projectName: string, agentName: string): "stopped" | "idle" | "running" {
+    const agent = this.get(projectName, agentName);
+    if (!agent) return "stopped";
+    return agent.isGenerating ? "running" : "idle";
   }
 
   async stopAll(): Promise<void> {

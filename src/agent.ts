@@ -23,10 +23,17 @@ export interface HistoryMessage {
   parts: HistoryPart[];
 }
 
+export interface AgentSession {
+  messages: ModelMessage[];
+  history: HistoryMessage[];
+}
+
 export interface AgentInputs {
   id: string;
   fs: Filesystem;
   repo: CodeRepository;
+  sessionPath: string;
+  session?: AgentSession;
   instructions?: string;
   skills?: Skill[];
   skillStore?: SkillStore;
@@ -34,19 +41,24 @@ export interface AgentInputs {
 
 export class Agent {
   readonly id: string;
-  private messages: ModelMessage[] = [];
-  private history: HistoryMessage[] = [];
+  private messages: ModelMessage[];
+  private history: HistoryMessage[];
+  private sessionPath: string;
   private tools: ReturnType<typeof buildTools>;
-
   private systemPrompt: string;
+  isGenerating = false;
 
-  constructor({ id, fs, repo, instructions, skills, skillStore }: AgentInputs) {
+  constructor({ id, fs, repo, sessionPath, session, instructions, skills, skillStore }: AgentInputs) {
     this.id = id;
+    this.sessionPath = sessionPath;
+    this.messages = session?.messages ?? [];
+    this.history = session?.history ?? [];
     this.tools = buildTools(fs, repo, skills ?? [], skillStore);
     this.systemPrompt = buildSystemPrompt(instructions, skills);
   }
 
   async *send(input: string): AsyncGenerator<AgentEvent> {
+    this.isGenerating = true;
     this.messages.push({ role: "user", content: input });
     this.history.push({ role: "user", parts: [{ type: "text", text: input }] });
 
@@ -87,6 +99,7 @@ export class Agent {
         }
       }
     } finally {
+      this.isGenerating = false;
       const response = await Promise.resolve(result.response).catch(() => null);
       if (response) {
         this.messages.push(...(response.messages as ModelMessage[]));
@@ -94,6 +107,7 @@ export class Agent {
       if (assistantEntry.parts.length > 0) {
         this.history.push(assistantEntry);
       }
+      await this.save();
     }
   }
 
@@ -115,11 +129,14 @@ export class Agent {
       { role: "user", content: `[Compacted context from previous conversation]\n\n${result.text}` },
       { role: "assistant", content: "I have the context from our previous session. Ready to continue." },
     ];
+
+    await this.save();
   }
 
-  clear(): void {
+  async clear(): Promise<void> {
     this.messages = [];
     this.history = [];
+    await Bun.file(this.sessionPath).unlink().catch(() => {});
   }
 
   getHistory(): HistoryMessage[] {
@@ -128,6 +145,11 @@ export class Agent {
 
   get messageCount(): number {
     return this.messages.length;
+  }
+
+  private async save(): Promise<void> {
+    const session: AgentSession = { messages: this.messages, history: this.history };
+    await Bun.write(this.sessionPath, JSON.stringify(session));
   }
 }
 
@@ -157,4 +179,3 @@ function buildTools(fs: Filesystem, repo: CodeRepository, skills: Skill[], skill
     ...(skillStore ? getToolkitFromSkills(skillStore, skills.map(s => s.name)) : {}),
   };
 }
-

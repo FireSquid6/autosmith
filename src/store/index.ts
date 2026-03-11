@@ -148,7 +148,7 @@ export class AutosmithStore {
   // ── Instructions (AGENT.md) ───────────────────────────────────────────────
 
   async getRootInstructions(): Promise<string> {
-    return Bun.file(join(this.root, "AGENT.md")).text();
+    return Bun.file(join(this.root, "AGENT.md")).text().catch(() => "");
   }
 
   async setRootInstructions(instructions: string): Promise<void> {
@@ -156,7 +156,7 @@ export class AutosmithStore {
   }
 
   async getProjectInstructions(projectName: string): Promise<string> {
-    return Bun.file(join(this.projectDir(projectName), "AGENT.md")).text();
+    return Bun.file(join(this.projectDir(projectName), "AGENT.md")).text().catch(() => "");
   }
 
   async setProjectInstructions(projectName: string, instructions: string): Promise<void> {
@@ -164,7 +164,7 @@ export class AutosmithStore {
   }
 
   async getAgentInstructions(projectName: string, agentName: string): Promise<string> {
-    return Bun.file(join(this.agentDir(projectName, agentName), "AGENT.md")).text();
+    return Bun.file(join(this.agentDir(projectName, agentName), "AGENT.md")).text().catch(() => "");
   }
 
   async setAgentInstructions(projectName: string, agentName: string, instructions: string): Promise<void> {
@@ -186,6 +186,16 @@ export class AutosmithStore {
   // Absolute path to the agent's workspace on the host
   agentWorkspacePath(projectName: string, agentName: string): string {
     return join(this.agentDir(projectName, agentName), "workspace");
+  }
+
+  agentSessionPath(projectName: string, agentName: string): string {
+    return join(this.agentDir(projectName, agentName), "session.json");
+  }
+
+  async readAgentSession(projectName: string, agentName: string): Promise<import("../agent").AgentSession | undefined> {
+    const file = Bun.file(this.agentSessionPath(projectName, agentName));
+    if (!(await file.exists())) return undefined;
+    return file.json();
   }
 
   private projectDir(name: string): string {
