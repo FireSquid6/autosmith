@@ -22,6 +22,31 @@ When you start an agent, Autosmith:
 4. Loads the agent's assigned skills and resolves its layered instructions
 5. Opens a streaming session — every tool call and text response flows back to the browser in real time
 
+
+## Installation
+
+### Manual
+Manual is recommended for now. Requires bun to be installed.
+
+```bash
+# clone repo
+git clone https://github.com/firesquid6/autosmith
+cd autosmith
+
+# install dependencies
+bun install --frozen-lockfile
+
+# build and install
+./scripts/local-install.sh
+
+# You'll need to add ~/.autosmith/bin to your PATH
+
+```
+
+### Automatic
+
+*One line installs not available yet* 
+
 ## Getting started
 
 **Prerequisites:** Bun, Docker
@@ -29,12 +54,6 @@ When you start an agent, Autosmith:
 ```sh
 # Build the agent Docker image
 docker build -t autosmith/agent:latest .
-
-# Initialize the data directory
-bun src/index.ts init
-
-# Start the server
-bun src/index.ts serve
 ```
 
 Then open `http://localhost:4456`.

@@ -23,7 +23,10 @@ const serveCommand = new Command()
     startServer({ port, storeDirectory });
   });
 
-const mainCommand = new Command();
+const mainCommand = new Command()
+  .name("autosmith")
+  .description("Your development workshop");
+
 mainCommand.addCommand(serveCommand);
 mainCommand.addCommand(clientCommand);
 mainCommand.addCommand(initCommand);
