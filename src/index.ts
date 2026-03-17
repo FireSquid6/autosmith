@@ -1,3 +1,4 @@
+import fs from "fs";
 import path from "path";
 import os from "os";
 import { Command } from "@commander-js/extra-typings";
@@ -12,8 +13,13 @@ const serveCommand = new Command()
   .action(({ port: portString, dir }) => {
     const port = typeof portString === "string" ? parseInt(portString) : 4456;
 
-    const defaultAutosmithDir = path.join(os.homedir(), "autosmith");
+    const defaultAutosmithDir = path.join(os.homedir(), ".autosmith/data");
     const storeDirectory = typeof dir === "string" ? dir : defaultAutosmithDir;
+    
+    if (!fs.existsSync(storeDirectory)) {
+      fs.mkdirSync(storeDirectory, { recursive: true });
+    }
+
     startServer({ port, storeDirectory });
   });
 
