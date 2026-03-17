@@ -15,7 +15,7 @@ const serveCommand = new Command()
 
     const defaultAutosmithDir = path.join(os.homedir(), ".autosmith/data");
     const storeDirectory = typeof dir === "string" ? dir : defaultAutosmithDir;
-    
+
     if (!fs.existsSync(storeDirectory)) {
       fs.mkdirSync(storeDirectory, { recursive: true });
     }
