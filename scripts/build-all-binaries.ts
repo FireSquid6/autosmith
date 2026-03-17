@@ -24,6 +24,8 @@ export async function build(setting: BuildSetting) {
   await $`cp -r ./dist ./out/${setting.target}`;
   await $`rm ./out/${setting.target}/index.js`;
   await $`bun build ./dist/index.js --compile --target=${setting.target} --outfile ./out/${setting.target}/autosmith`;
+  await $`cd ./out/${setting.target} && zip ../${setting.target}.zip ./*`;
+  await $`rm -rf ./out/${setting.target}`;
 }
 
 
