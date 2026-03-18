@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "bun --hot src/index.ts",
     "start": "NODE_ENV=production bun src/index.ts",
-    "build": "bun run scripts/build.ts"
+    "build": "bun run scripts/build.ts",
+    "publish-environments": "bun run scripts/publish-environments.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.47",

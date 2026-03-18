@@ -139,6 +139,11 @@ export const covenant = declareCovenant({
         agent: z.record(z.string(), z.string()),
       }),
     }),
+    // Environments
+    listEnvironments: query({ input: z.null(), output: z.array(z.string()) }),
+    addEnvironment: mutation({ input: z.object({ image: z.string() }), output: z.null() }),
+    removeEnvironment: mutation({ input: z.object({ image: z.string() }), output: z.null() }),
+
     listSkills: query({
       input: z.null(),
       output: z.array(z.object({

@@ -5,6 +5,7 @@ import { client } from "../client";
 export default function NewAgent() {
   const { projectName } = useParams<{ projectName: string }>();
   const navigate = useNavigate();
+  const { data: environments } = client.useQuery("listEnvironments", null);
   const [createAgent, { loading, error }] = client.useMutation("createAgent", {
     onSuccess: () => navigate(`/projects/${projectName}`),
   });
@@ -64,14 +65,16 @@ export default function NewAgent() {
           <label className="label">
             <span className="label-text font-medium">Docker Image</span>
           </label>
-          <input
-            type="text"
-            className="input input-bordered font-mono"
-            placeholder="autosmith/agent:latest"
+          <select
+            className="select select-bordered font-mono"
             value={form.dockerImage}
             onChange={set("dockerImage")}
             required
-          />
+          >
+            {(environments ?? ["autosmith/agent:latest"]).map((image) => (
+              <option key={image} value={image}>{image}</option>
+            ))}
+          </select>
         </div>
 
         <div className="form-control">

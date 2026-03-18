@@ -59,6 +59,31 @@ export class AutosmithStore {
     if (!(await Bun.file(rootAgentMd).exists())) {
       await Bun.write(rootAgentMd, ROOT_AGENT_MD_DEFAULT);
     }
+    const environmentsYaml = join(this.root, "environments.yaml");
+    if (!(await Bun.file(environmentsYaml).exists())) {
+      await Bun.write(environmentsYaml, YAML.stringify(["autosmith/agent:latest"]));
+    }
+  }
+
+  // ── Environments ──────────────────────────────────────────────────────────
+
+  async listEnvironments(): Promise<string[]> {
+    const file = Bun.file(join(this.root, "environments.yaml"));
+    if (!(await file.exists())) return ["autosmith/agent:latest"];
+    const parsed = YAML.parse(await file.text());
+    return z.array(z.string()).parse(parsed);
+  }
+
+  async addEnvironment(image: string): Promise<void> {
+    const existing = await this.listEnvironments();
+    if (!existing.includes(image)) {
+      await Bun.write(join(this.root, "environments.yaml"), YAML.stringify([...existing, image]));
+    }
+  }
+
+  async removeEnvironment(image: string): Promise<void> {
+    const existing = await this.listEnvironments();
+    await Bun.write(join(this.root, "environments.yaml"), YAML.stringify(existing.filter(e => e !== image)));
   }
 
   // Per-scope token stores (for direct read/write to a specific level)

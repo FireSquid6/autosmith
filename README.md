@@ -56,6 +56,9 @@ Alternatively, check the releases and download the binary. Put it where you'd li
 ```sh
 # Build the agent Docker image
 docker build -t autosmith/agent:latest .
+
+autosmith init
+automsith serve
 ```
 
 Then open `http://localhost:4456`.

@@ -117,6 +117,29 @@ export function registerContentProcedures(server: AppServer, store: AutosmithSto
     },
   });
 
+  // ── Environments ───────────────────────────────────────────────────────────
+
+  server.defineProcedure("listEnvironments", {
+    resources: () => ["environments"],
+    procedure: () => store.listEnvironments(),
+  });
+
+  server.defineProcedure("addEnvironment", {
+    resources: () => ["environments"],
+    procedure: async ({ inputs }) => {
+      await store.addEnvironment(inputs.image);
+      return null;
+    },
+  });
+
+  server.defineProcedure("removeEnvironment", {
+    resources: () => ["environments"],
+    procedure: async ({ inputs }) => {
+      await store.removeEnvironment(inputs.image);
+      return null;
+    },
+  });
+
   // ── Skills ─────────────────────────────────────────────────────────────────
 
   server.defineProcedure("listSkills", {

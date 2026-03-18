@@ -5,6 +5,7 @@ import { Command } from "@commander-js/extra-typings";
 import { startServer } from "./backend";
 import { clientCommand } from "./cli/client";
 import { initCommand } from "./cli/init";
+import { pullEnvironmentsCommand } from "./cli/pull-environments";
 
 const serveCommand = new Command()
   .name("serve")
@@ -30,4 +31,5 @@ const mainCommand = new Command()
 mainCommand.addCommand(serveCommand);
 mainCommand.addCommand(clientCommand);
 mainCommand.addCommand(initCommand);
+mainCommand.addCommand(pullEnvironmentsCommand);
 mainCommand.parse();
