@@ -47,6 +47,8 @@ bun install --frozen-lockfile
 
 *One line installs not available yet* 
 
+Alternatively, check the releases and download the binary. Put it where you'd like.
+
 ## Getting started
 
 **Prerequisites:** Bun, Docker
