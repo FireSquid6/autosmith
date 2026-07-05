@@ -1,47 +1,16 @@
 {
-  "name": "autosmith",
-  "version": "0.1.0",
-  "private": true,
+  "name": "fleet-monorepo",
+  "module": "index.ts",
   "type": "module",
-  "scripts": {
-    "dev": "bun --hot src/index.ts",
-    "start": "NODE_ENV=production bun src/index.ts",
-    "build": "bun run scripts/build.ts",
-    "publish-environments": "bun run scripts/publish-environments.ts"
-  },
-  "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.47",
-    "@commander-js/extra-typings": "^14.0.0",
-    "@covenant-rpc/client": "^2.0.0",
-    "@covenant-rpc/core": "^2.0.0",
-    "@covenant-rpc/react": "^2.1.0",
-    "@covenant-rpc/server": "^2.3.0",
-    "@covenant-rpc/sidekick-bun-adapter": "^2.0.0",
-    "@docker/node-sdk": "^0.0.17",
-    "@heroicons/react": "^2.2.0",
-    "@octokit/rest": "^22.0.1",
-    "ai": "^6.0.103",
-    "bun-plugin-tailwind": "^0.1.2",
-    "commander-js": "^0.0.1-security",
-    "daisyui": "^5.5.19",
-    "gray-matter": "^4.0.3",
-    "inquirer": "^13.3.0",
-    "react": "^19",
-    "react-dom": "^19",
-    "react-markdown": "^10.1.0",
-    "react-router": "^7.13.1",
-    "react-router-dom": "^7.13.1",
-    "react-syntax-highlighter": "^16.1.1",
-    "remark-gfm": "^4.0.1",
-    "tailwindcss": "^4.1.11",
-    "yaml": "^2.8.2",
-    "zod": "^4.3.6"
-  },
+  "private": true,
   "devDependencies": {
-    "@types/bun": "latest",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "@types/react-router-dom": "^5.3.3",
-    "@types/react-syntax-highlighter": "^15.5.13"
-  }
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ]
 }
