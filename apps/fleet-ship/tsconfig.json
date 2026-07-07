@@ -25,5 +25,8 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
-  }
+  },
+  // Runtime workspace data (cloned repos) lives under the configured fleetDirectory
+  // (default ./fleet-data); never typecheck it.
+  "exclude": ["fleet-data", "autosmith-data"]
 }

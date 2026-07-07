@@ -4,10 +4,23 @@
  */
 
 export { DEFAULT_PORT, FleetShipConfigSchema, type FleetShipConfig } from "./src/config";
+export { WorkspaceSummarySchema, type WorkspaceSummary } from "./src/workspace";
 export type {
-  WorkspaceSummary,
   WorkspaceDiff,
   WorkspaceStatus,
   CreateWorkspaceRequest,
   SwitchBranchRequest,
 } from "./src/workspace";
+
+export {
+  SyncEventSchema,
+  WorkspaceCreatedEventSchema,
+  WorkspaceBranchChangedEventSchema,
+  WorkspaceActivatedEventSchema,
+  WorkspaceDeactivatedEventSchema,
+  WorkspaceRemovedEventSchema,
+  FleetEventSchema,
+  decodeFleetEvent,
+  type SyncEvent,
+  type FleetEvent,
+} from "./src/events";

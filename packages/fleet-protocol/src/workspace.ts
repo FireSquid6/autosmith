@@ -7,17 +7,25 @@
  * exists) or `inactive` (only the directory exists).
  */
 
-/** Summary row returned by `GET /workspaces` (list view). */
-export interface WorkspaceSummary {
+import { z } from "zod";
+
+/**
+ * Summary row returned by `GET /workspaces` (list view). It is also embedded in
+ * the `/events` stream, so it is a zod schema (with the type inferred from it) —
+ * consumers can validate it directly.
+ */
+export const WorkspaceSummarySchema = z.object({
   /** Repo the workspace belongs to (the clone URL basename, `.git` stripped). */
-  readonly repo: string;
+  repo: z.string(),
   /** Workspace name, unique within its repo. */
-  readonly name: string;
+  name: z.string(),
   /** Currently checked-out branch. */
-  readonly branch: string;
+  branch: z.string(),
   /** Whether a tmux session is currently up for this workspace. */
-  readonly active: boolean;
-}
+  active: z.boolean(),
+});
+
+export type WorkspaceSummary = z.infer<typeof WorkspaceSummarySchema>;
 
 /** Git diff summary for an active workspace. */
 export interface WorkspaceDiff {

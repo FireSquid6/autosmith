@@ -11,7 +11,8 @@
     "@types/bun": "latest",
     "webterm": "workspace:*",
     "git-bun": "workspace:*",
-    "libghostty-bun": "workspace:*"
+    "libghostty-bun": "workspace:*",
+    "fleet-protocol": "workspace:*"
   },
   "peerDependencies": {
     "typescript": "^5"

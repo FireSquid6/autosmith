@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Git } from "git-bun";
+import type { FleetEvent } from "fleet-protocol";
 import { WorkspaceError, WorkspaceManager } from "../../apps/fleet-ship/src/workspace-manager";
 
 const config = { fleetDirectory: "/tmp/fleet-ship-test-fleet", port: 4700, name: "test-ship" };
@@ -126,5 +127,44 @@ suite("WorkspaceManager end-to-end", () => {
     expect(active.length + inactive.length).toBe(all.length);
     for (const w of active) expect(w.active).toBe(true);
     for (const w of inactive) expect(w.active).toBe(false);
+  });
+
+  test("emits an event for each state change, always stamped with the ship name", async () => {
+    const events: FleetEvent[] = [];
+    const unsubscribe = manager.subscribe((e) => events.push(e));
+    try {
+      const created = await manager.create({ repo: sourceRepo, name: "ws-events", branch: "main" });
+      const repo = created.repo;
+      await manager.activate(repo, "ws-events");
+      await manager.switchBranch(repo, "ws-events", { branch: "feature" });
+      await manager.deactivate(repo, "ws-events");
+      await manager.remove(repo, "ws-events");
+    } finally {
+      unsubscribe();
+    }
+
+    expect(events.map((e) => e.type)).toEqual([
+      "workspace.created",
+      "workspace.activated",
+      "workspace.branch_changed",
+      "workspace.deactivated",
+      "workspace.removed",
+    ]);
+    for (const event of events) expect(event.ship).toBe("test-ship");
+
+    // Spot-check embedded summaries reflect the resulting state.
+    const activated = events.find((e) => e.type === "workspace.activated");
+    if (activated && activated.type === "workspace.activated") {
+      expect(activated.workspace.active).toBe(true);
+    }
+    const branchChanged = events.find((e) => e.type === "workspace.branch_changed");
+    if (branchChanged && branchChanged.type === "workspace.branch_changed") {
+      expect(branchChanged.workspace.branch).toBe("feature");
+    }
+
+    // The unsubscribe should stop further delivery.
+    const before = events.length;
+    await manager.create({ repo: sourceRepo, name: "ws-events-2", branch: "main" });
+    expect(events.length).toBe(before);
   });
 });

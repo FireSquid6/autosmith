@@ -12,6 +12,7 @@ import { basename, join } from "node:path";
 import { Git } from "git-bun";
 import { Tmux } from "tmux-bun";
 import type {
+  FleetEvent,
   FleetShipConfig,
   WorkspaceDiff,
   WorkspaceStatus,
@@ -50,8 +51,34 @@ function repoBasename(repoUrlOrName: string): string {
 export class WorkspaceManager {
   private readonly tmux: Tmux;
 
+  private readonly listeners = new Set<(event: FleetEvent) => void>();
+
   constructor(private readonly config: FleetShipConfig) {
     this.tmux = new Tmux({ namespace: TMUX_NAMESPACE, configFile: "/dev/null" });
+  }
+
+  /**
+   * Subscribe to workspace state-change events (create/branch/activate/
+   * deactivate/remove). Returns an unsubscribe function.
+   */
+  subscribe(listener: (event: FleetEvent) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  /** A `sync` event snapshotting the current workspaces (sent to new subscribers). */
+  async snapshotEvent(): Promise<FleetEvent> {
+    const workspaces = await this.list();
+    return { type: "sync", ...this.stamp(), workspaces };
+  }
+
+  private emit(event: FleetEvent): void {
+    for (const listener of this.listeners) listener(event);
+  }
+
+  /** Common event fields: the emitting ship's name and an ISO timestamp. */
+  private stamp(): { ship: string; at: string } {
+    return { ship: this.config.name, at: new Date().toISOString() };
   }
 
   /** Deterministic tmux session name for a `(repo, name)` pair. */
@@ -137,7 +164,9 @@ export class WorkspaceManager {
     const dir = this.workspaceDir(repo, name);
     await Git.clone(options.repo, dir, { branch });
 
-    return { repo, name, branch, active: false };
+    const summary: WorkspaceSummary = { repo, name, branch, active: false };
+    this.emit({ type: "workspace.created", ...this.stamp(), workspace: summary });
+    return summary;
   }
 
   async switchBranch(repo: string, name: string, options: SwitchBranchOptions): Promise<void> {
@@ -146,6 +175,9 @@ export class WorkspaceManager {
     }
     const git = new Git({ cwd: this.workspaceDir(repo, name) });
     await git.switchBranch(options.branch, { create: true });
+
+    const workspace = await this.summarize(repo, name);
+    this.emit({ type: "workspace.branch_changed", ...this.stamp(), workspace });
   }
 
   async activate(repo: string, name: string): Promise<void> {
@@ -157,6 +189,9 @@ export class WorkspaceManager {
       throw new WorkspaceError(`workspace already active: ${repo}/${name}`, 400);
     }
     await this.tmux.newSession({ name: sessionName, dir: this.workspaceDir(repo, name) });
+
+    const workspace = await this.summarize(repo, name);
+    this.emit({ type: "workspace.activated", ...this.stamp(), workspace });
   }
 
   async deactivate(repo: string, name: string): Promise<void> {
@@ -168,17 +203,29 @@ export class WorkspaceManager {
       throw new WorkspaceError(`workspace not active: ${repo}/${name}`, 400);
     }
     await this.tmux.session(sessionName).kill();
+
+    const workspace = await this.summarize(repo, name);
+    this.emit({ type: "workspace.deactivated", ...this.stamp(), workspace });
   }
 
   async remove(repo: string, name: string): Promise<void> {
     if (!(await this.has(repo, name))) {
       throw new WorkspaceError(`workspace not found: ${repo}/${name}`, 404);
     }
+
+    // Capture the branch before deleting the directory so the `removed` event can
+    // still identify the workspace's last-known state.
+    const git = new Git({ cwd: this.workspaceDir(repo, name) });
+    const branch = await git.currentBranch().catch(() => "");
+
     const sessionName = this.sessionName(repo, name);
     if (await this.tmux.hasSession(sessionName)) {
       await this.tmux.session(sessionName).kill();
     }
     await rm(this.workspaceDir(repo, name), { recursive: true, force: true });
+
+    const workspace: WorkspaceSummary = { repo, name, branch, active: false };
+    this.emit({ type: "workspace.removed", ...this.stamp(), workspace });
   }
 
   private async summarize(repo: string, name: string): Promise<WorkspaceSummary> {
