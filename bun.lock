@@ -11,6 +11,15 @@
         "typescript": "^5",
       },
     },
+    "apps/cli": {
+      "name": "cli",
+      "devDependencies": {
+        "@types/bun": "latest",
+      },
+      "peerDependencies": {
+        "typescript": "^5",
+      },
+    },
     "apps/fleet-client": {
       "name": "bun-react-template",
       "version": "0.1.0",
@@ -45,6 +54,15 @@
     },
     "apps/fleet-host": {
       "name": "fleet-host",
+      "devDependencies": {
+        "@types/bun": "latest",
+      },
+      "peerDependencies": {
+        "typescript": "^5",
+      },
+    },
+    "packages/git-bun": {
+      "name": "git-bun",
       "devDependencies": {
         "@types/bun": "latest",
       },
@@ -187,6 +205,8 @@
 
     "class-variance-authority": ["class-variance-authority@0.7.1", "", { "dependencies": { "clsx": "^2.1.1" } }, "sha512-Ka+9Trutv7G8M6WT6SeiRWz792K5qEqIGEGzXKhAE6xOWAY6pPH8U+9IY3oCMv6kqTmLsv7Xh/2w2RigkePMsg=="],
 
+    "cli": ["cli@workspace:apps/cli"],
+
     "clsx": ["clsx@2.1.1", "", {}, "sha512-eYm0QWBtUrBWZWG0d386OGAw16Z995PiOVo2B7bjWSbHedGl5e0ZWaq65kOGgUSNesEIDkB9ISbTg/JK9dhCZA=="],
 
     "csstype": ["csstype@3.2.3", "", {}, "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ=="],
@@ -198,6 +218,8 @@
     "fleet-host": ["fleet-host@workspace:apps/fleet-host"],
 
     "get-nonce": ["get-nonce@1.0.1", "", {}, "sha512-FJhYRoDaiatfEkUK8HKlicmu/3SGFD51q3itKDGoSTysQJBnfOcxU5GxnhE1E6soB76MbT0MBtnKJuXyAx+96Q=="],
+
+    "git-bun": ["git-bun@workspace:packages/git-bun"],
 
     "libghostty-bun": ["libghostty-bun@workspace:packages/libghostty-bun"],
 
