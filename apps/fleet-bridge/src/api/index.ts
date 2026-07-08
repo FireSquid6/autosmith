@@ -12,12 +12,14 @@ import type { BridgeConfig } from "../config";
 import { workspacesPlugin } from "./workspaces";
 import { shipsPlugin } from "./ships";
 import { systemResourcesPlugin } from "./system-resources";
+import { reposPlugin } from "./repos";
 
 export function createApp(manager: FleetManager, _config: BridgeConfig) {
   return new Elysia()
     .use(workspacesPlugin(manager))
     .use(shipsPlugin(manager))
-    .use(systemResourcesPlugin(manager));
+    .use(systemResourcesPlugin(manager))
+    .use(reposPlugin(manager));
 }
 
 export type App = ReturnType<typeof createApp>;

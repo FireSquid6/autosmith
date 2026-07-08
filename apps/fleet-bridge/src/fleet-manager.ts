@@ -13,7 +13,7 @@
  */
 
 import { basename } from "node:path";
-import type { FleetEvent, SystemResources, WorkspaceStatus, WorkspaceSummary } from "fleet-protocol";
+import type { FleetEvent, RepoSummary, SystemResources, WorkspaceStatus, WorkspaceSummary } from "fleet-protocol";
 import { ShipConnection, toWsUrl, type ShipConnectionDeps } from "./ship-connection";
 import { loadStore, saveStore, type ShipRecord } from "./store";
 import type { BridgeConfig } from "./config";
@@ -21,6 +21,7 @@ import {
   workspaceKey,
   type BridgeWorkspaceStatus,
   type BridgeWorkspaceSummary,
+  type FleetRepo,
   type ShipInfo,
   type ShipSystemResources,
 } from "./types";
@@ -216,6 +217,61 @@ export class FleetManager {
     return this.call<SystemResources>(
       conn,
       () => conn.client["system-resources"].get() as Promise<EdenResult<SystemResources>>,
+    );
+  }
+
+  // --- repos ----------------------------------------------------------------
+
+  /** `GET /ships/:ship/repos` — proxied live to one ship. */
+  async getShipRepos(shipName: string): Promise<RepoSummary[]> {
+    const conn = this.connections.get(shipName);
+    if (!conn) throw new BridgeError(`unknown ship: ${shipName}`, 400);
+    if (conn.status !== "online") throw new BridgeError(`ship "${shipName}" is offline`, 503);
+    return this.fetchRepos(conn);
+  }
+
+  /**
+   * `GET /repos` — fetch every online ship's repos and merge them by repo id into
+   * a fleet-wide view (total workspaces + the ships hosting each repo). Offline
+   * ships and any that error contribute nothing.
+   */
+  async listRepos(): Promise<FleetRepo[]> {
+    const online = [...this.connections.values()].filter((conn) => conn.status === "online");
+    const perShip = await Promise.all(
+      online.map(async (conn) => {
+        try {
+          return { ship: conn.name, repos: await this.fetchRepos(conn) };
+        } catch {
+          return { ship: conn.name, repos: [] as RepoSummary[] };
+        }
+      }),
+    );
+
+    const merged = new Map<string, FleetRepo>();
+    for (const { ship, repos } of perShip) {
+      for (const repo of repos) {
+        const existing = merged.get(repo.repo);
+        if (existing) {
+          existing.workspaces += repo.workspaces;
+          existing.ships.push(ship);
+          if (!existing.remote) existing.remote = repo.remote;
+        } else {
+          merged.set(repo.repo, {
+            repo: repo.repo,
+            remote: repo.remote,
+            workspaces: repo.workspaces,
+            ships: [ship],
+          });
+        }
+      }
+    }
+    return [...merged.values()];
+  }
+
+  private fetchRepos(conn: ShipConnection): Promise<RepoSummary[]> {
+    return this.call<RepoSummary[]>(
+      conn,
+      () => conn.client.repos.get() as Promise<EdenResult<RepoSummary[]>>,
     );
   }
 

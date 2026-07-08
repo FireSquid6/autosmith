@@ -127,4 +127,20 @@ describe("bridge API", () => {
     FakeSocket.byBase.get("http://ship-b")?.close();
     expect((await call("GET", "/ships/ship-b/system-resources")).status).toBe(503);
   });
+
+  test("GET /repos merges; per-ship 200/400/503", async () => {
+    const agg = await call("GET", "/repos");
+    expect(agg.status).toBe(200);
+    expect(agg.body.map((r: { repo: string }) => r.repo).sort()).toEqual(["repo1", "repo2"]);
+
+    const perShip = await call("GET", "/ships/ship-a/repos");
+    expect(perShip.status).toBe(200);
+    expect(perShip.body).toEqual([{ repo: "repo1", remote: "git@fake/repo1.git", workspaces: 1 }]);
+
+    expect((await call("GET", "/ships/ghost/repos")).status).toBe(400);
+
+    ships.delete("http://ship-b");
+    FakeSocket.byBase.get("http://ship-b")?.close();
+    expect((await call("GET", "/ships/ship-b/repos")).status).toBe(503);
+  });
 });

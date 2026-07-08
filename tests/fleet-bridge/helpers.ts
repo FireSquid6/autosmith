@@ -126,7 +126,20 @@ export function makeFakeClient(httpUrl: string, ships: Map<string, FakeShip>) {
   return {
     workspaces: workspacesFn,
     "system-resources": { get: () => wrap(() => fakeResources(ship()?.name ?? "unknown")) },
+    repos: { get: () => wrap(() => reposOf(ship())) },
   };
+}
+
+/** Derive a RepoSummary[] from a fake ship's workspaces (grouped by repo). */
+export function reposOf(ship?: FakeShip) {
+  if (!ship) return [];
+  const counts = new Map<string, number>();
+  for (const w of ship.workspaces) counts.set(w.repo, (counts.get(w.repo) ?? 0) + 1);
+  return [...counts.entries()].map(([repo, workspaces]) => ({
+    repo,
+    remote: `git@fake/${repo}.git`,
+    workspaces,
+  }));
 }
 
 /** Build `ShipConnectionDeps` backed by the fake ships (optionally overriding pieces). */

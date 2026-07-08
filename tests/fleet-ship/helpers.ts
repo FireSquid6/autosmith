@@ -9,6 +9,7 @@ import type { WorkspaceManager } from "../../apps/fleet-ship/src/workspace-manag
 export function stubManager(overrides: Record<string, unknown> = {}): WorkspaceManager {
   const base: Record<string, unknown> = {
     list: async () => [],
+    listRepos: async () => [],
     get: async () => ({ state: "inactive", repo: "r", name: "n", branch: "main" }),
     create: async (b: { repo: string; name: string; branch: string }) => ({ ...b, active: false }),
     switchBranch: async () => {},

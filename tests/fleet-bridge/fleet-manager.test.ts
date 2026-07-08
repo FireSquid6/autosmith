@@ -210,6 +210,37 @@ describe("FleetManager", () => {
     expect(b.resources).toBeNull();
   });
 
+  test("getShipRepos proxies one ship; unknown -> 400", async () => {
+    const ships = new Map<string, FakeShip>([
+      ["http://ship-a", { name: "ship-a", workspaces: [ws("repo1", "one"), ws("repo1", "two")] }],
+    ]);
+    const mgr = await boot(ships);
+
+    const repos = await mgr.getShipRepos("ship-a");
+    expect(repos).toEqual([{ repo: "repo1", remote: "git@fake/repo1.git", workspaces: 2 }]);
+    await expect(mgr.getShipRepos("ghost")).rejects.toMatchObject({ status: 400 });
+  });
+
+  test("listRepos merges repos across ships (counts summed, ships listed)", async () => {
+    const ships = new Map<string, FakeShip>([
+      ["http://ship-a", { name: "ship-a", workspaces: [ws("repo1", "one")] }],
+      ["http://ship-b", { name: "ship-b", workspaces: [ws("repo1", "two"), ws("repo2", "x")] }],
+    ]);
+    const mgr = await boot(ships);
+
+    const repos = (await mgr.listRepos()).sort((a, b) => a.repo.localeCompare(b.repo));
+    expect(repos).toHaveLength(2);
+
+    const repo1 = repos.find((r) => r.repo === "repo1")!;
+    expect(repo1.workspaces).toBe(2);
+    expect(repo1.ships.sort()).toEqual(["ship-a", "ship-b"]);
+    expect(repo1.remote).toBe("git@fake/repo1.git");
+
+    const repo2 = repos.find((r) => r.repo === "repo2")!;
+    expect(repo2.workspaces).toBe(1);
+    expect(repo2.ships).toEqual(["ship-b"]);
+  });
+
   test("routes to 503 when the owning ship goes offline", async () => {
     const ships = new Map<string, FakeShip>([
       ["http://ship-a", { name: "ship-a", workspaces: [ws("repo1", "one")] }],

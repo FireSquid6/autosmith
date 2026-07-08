@@ -217,4 +217,18 @@ suite("WorkspaceManager end-to-end", () => {
     const all = await manager.list();
     expect(all.some((w) => w.name === "notaworkspace")).toBe(false);
   });
+
+  test("listRepos groups workspaces by repo with the origin remote", async () => {
+    const created = await manager.create({ repo: sourceRepo, name: "repos-a", branch: "main" });
+    await manager.create({ repo: sourceRepo, name: "repos-b", branch: "main" });
+
+    const repos = await manager.listRepos();
+    const entry = repos.find((r) => r.repo === created.repo);
+    expect(entry).toBeDefined();
+    expect(entry?.workspaces).toBeGreaterThanOrEqual(2);
+    expect(entry?.remote).toBe(sourceRepo);
+
+    await manager.remove(created.repo, "repos-a");
+    await manager.remove(created.repo, "repos-b");
+  });
 });

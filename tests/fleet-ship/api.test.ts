@@ -99,4 +99,13 @@ describe("ship API", () => {
     expect(res.body.memory.total).toBeGreaterThan(0);
     expect(res.body.os.hostname.length).toBeGreaterThan(0);
   });
+
+  test("GET /repos returns the manager's repo list", async () => {
+    const call = makeApp({
+      listRepos: async () => [{ repo: "sysdef", remote: "git@x/sysdef.git", workspaces: 2 }],
+    });
+    const res = await call("GET", "/repos");
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([{ repo: "sysdef", remote: "git@x/sysdef.git", workspaces: 2 }]);
+  });
 });

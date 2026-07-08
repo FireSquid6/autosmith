@@ -14,6 +14,7 @@ import { Tmux } from "tmux-bun";
 import type {
   FleetEvent,
   FleetShipConfig,
+  RepoSummary,
   WorkspaceDiff,
   WorkspaceStatus,
   WorkspaceSummary,
@@ -117,6 +118,39 @@ export class WorkspaceManager {
 
     if (filter === undefined) return summaries;
     return summaries.filter((s) => (filter === "active" ? s.active : !s.active));
+  }
+
+  /** List the repos on this ship: the `<repo>` groupings, with their shared remote. */
+  async listRepos(): Promise<RepoSummary[]> {
+    const repos: RepoSummary[] = [];
+
+    const repoNames = await this.safeReaddir(this.config.fleetDirectory);
+    for (const repo of repoNames) {
+      const repoDir = join(this.config.fleetDirectory, repo);
+      const names = await this.safeReaddir(repoDir);
+      const workspaceNames: string[] = [];
+      for (const name of names) {
+        if (await this.has(repo, name)) workspaceNames.push(name);
+      }
+      if (workspaceNames.length === 0) continue; // not a real repo grouping
+
+      const remote = await this.repoRemote(repo, workspaceNames[0]!);
+      repos.push({ repo, remote, workspaces: workspaceNames.length });
+    }
+
+    return repos;
+  }
+
+  /** Origin fetch URL of a representative workspace, or null if unavailable. */
+  private async repoRemote(repo: string, name: string): Promise<string | null> {
+    try {
+      const git = new Git({ cwd: this.workspaceDir(repo, name) });
+      const remotes = await git.remotes();
+      const origin = remotes.find((r) => r.name === "origin") ?? remotes[0];
+      return origin?.fetchUrl || null;
+    } catch {
+      return null;
+    }
   }
 
   async get(repo: string, name: string): Promise<WorkspaceStatus> {
