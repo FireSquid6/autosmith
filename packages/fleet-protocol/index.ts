@@ -11,6 +11,7 @@ export type {
   CreateWorkspaceRequest,
   SwitchBranchRequest,
 } from "./src/workspace";
+export type { SystemResources } from "./src/system";
 
 export {
   SyncEventSchema,

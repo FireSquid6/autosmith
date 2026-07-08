@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import type { WorkspaceSummary } from "fleet-protocol";
+import type { SystemResources, WorkspaceSummary } from "fleet-protocol";
 import { BridgeError, FleetManager } from "../../apps/fleet-bridge/src/fleet-manager";
 import type { ShipConnectionDeps, SocketLike } from "../../apps/fleet-bridge/src/ship-connection";
 import { saveStore } from "../../apps/fleet-bridge/src/store";
@@ -83,7 +83,30 @@ function makeFakeClient(httpUrl: string, ships: Map<string, FakeShip>) {
     data: { repo: repoBasename(body.repo), name: body.name, branch: body.branch, active: false },
     error: null,
   });
-  return { workspaces: workspacesFn };
+  return {
+    workspaces: workspacesFn,
+    "system-resources": {
+      get: async () => ({ data: fakeResources(ship()?.name ?? "unknown"), error: null }),
+    },
+  };
+}
+
+/** A canned SystemResources snapshot tagged by hostname so tests can tell ships apart. */
+function fakeResources(hostname: string): SystemResources {
+  return {
+    uptimeSeconds: 1234,
+    os: {
+      type: "Linux",
+      platform: "linux",
+      release: "6.0.0",
+      version: "#1 SMP",
+      arch: "x64",
+      machine: "x86_64",
+      hostname,
+    },
+    cpu: { model: "Fake CPU", cores: 8, usage: 0.25, loadAverage: [0.1, 0.2, 0.3] },
+    memory: { total: 1000, free: 400, used: 600, usage: 0.6 },
+  };
 }
 
 function makeDeps(ships: Map<string, FakeShip>): Partial<ShipConnectionDeps> {
@@ -244,6 +267,51 @@ describe("FleetManager", () => {
     const status = await mgr.getWorkspace("repo1", "one");
     expect(status).toMatchObject({ state: "inactive", repo: "repo1", name: "one", ship: "ship-a" });
     await expect(mgr.getWorkspace("nope", "gone")).rejects.toMatchObject({ status: 404 });
+  });
+
+  test("getShipSystemResources proxies one ship; unknown -> 400", async () => {
+    const ships = new Map<string, FakeShip>([
+      ["http://ship-a", { name: "ship-a", workspaces: [] }],
+    ]);
+    await saveStore(dir, [{ name: "ship-a", url: "http://ship-a" }]);
+
+    const mgr = build(ships);
+    await mgr.init();
+
+    const res = await mgr.getShipSystemResources("ship-a");
+    expect(res.os.hostname).toBe("ship-a");
+    expect(res.cpu.cores).toBe(8);
+    await expect(mgr.getShipSystemResources("ghost")).rejects.toMatchObject({ status: 400 });
+  });
+
+  test("listSystemResources aggregates all ships; offline ones report null", async () => {
+    const ships = new Map<string, FakeShip>([
+      ["http://ship-a", { name: "ship-a", workspaces: [] }],
+      ["http://ship-b", { name: "ship-b", workspaces: [] }],
+    ]);
+    await saveStore(dir, [
+      { name: "ship-a", url: "http://ship-a" },
+      { name: "ship-b", url: "http://ship-b" },
+    ]);
+
+    const mgr = build(ships);
+    await mgr.init();
+
+    // Take ship-b offline (drop it so a reconnect can't revive it, then close).
+    ships.delete("http://ship-b");
+    FakeSocket.byBase.get("http://ship-b")?.close();
+
+    const all = (await mgr.listSystemResources()).sort((a, b) => a.ship.localeCompare(b.ship));
+    expect(all).toHaveLength(2);
+
+    const a = all.find((r) => r.ship === "ship-a")!;
+    expect(a.status).toBe("online");
+    expect(a.resources?.os.hostname).toBe("ship-a");
+    expect(a.error).toBeNull();
+
+    const b = all.find((r) => r.ship === "ship-b")!;
+    expect(b.status).toBe("offline");
+    expect(b.resources).toBeNull();
   });
 
   test("routes to 503 when the owning ship goes offline", async () => {

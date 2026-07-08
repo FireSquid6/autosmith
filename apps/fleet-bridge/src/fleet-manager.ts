@@ -13,7 +13,7 @@
  */
 
 import { basename } from "node:path";
-import type { FleetEvent, WorkspaceStatus, WorkspaceSummary } from "fleet-protocol";
+import type { FleetEvent, SystemResources, WorkspaceStatus, WorkspaceSummary } from "fleet-protocol";
 import { ShipConnection, toWsUrl, type ShipConnectionDeps } from "./ship-connection";
 import { loadStore, saveStore, type ShipRecord } from "./store";
 import type { BridgeConfig } from "./config";
@@ -22,6 +22,7 @@ import {
   type BridgeWorkspaceStatus,
   type BridgeWorkspaceSummary,
   type ShipInfo,
+  type ShipSystemResources,
 } from "./types";
 
 /** A typed error carrying the HTTP status the API layer should map it to. */
@@ -173,6 +174,45 @@ export class FleetManager {
       if (owner === name) this.index.delete(key);
     }
     await this.persist();
+  }
+
+  // --- system resources -----------------------------------------------------
+
+  /** `GET /ships/:ship/system-resources` — proxied live to one ship. */
+  async getShipSystemResources(shipName: string): Promise<SystemResources> {
+    const conn = this.connections.get(shipName);
+    if (!conn) throw new BridgeError(`unknown ship: ${shipName}`, 400);
+    if (conn.status !== "online") throw new BridgeError(`ship "${shipName}" is offline`, 503);
+    return this.fetchSystemResources(conn);
+  }
+
+  /**
+   * `GET /system-resources` — fetch every ship's resources in parallel. Offline
+   * ships (and any that error) are reported with `resources: null` rather than
+   * failing the whole aggregate.
+   */
+  async listSystemResources(): Promise<ShipSystemResources[]> {
+    return Promise.all(
+      [...this.connections.values()].map(async (conn) => {
+        if (conn.status !== "online") {
+          return { ship: conn.name, status: conn.status, resources: null, error: null };
+        }
+        try {
+          const resources = await this.fetchSystemResources(conn);
+          return { ship: conn.name, status: conn.status, resources, error: null };
+        } catch (err) {
+          const error = err instanceof Error ? err.message : String(err);
+          return { ship: conn.name, status: conn.status, resources: null, error };
+        }
+      }),
+    );
+  }
+
+  private fetchSystemResources(conn: ShipConnection): Promise<SystemResources> {
+    return this.call<SystemResources>(
+      conn,
+      () => conn.client["system-resources"].get() as Promise<EdenResult<SystemResources>>,
+    );
   }
 
   // --- workspace API (superset of the ship's) -------------------------------

@@ -8,7 +8,7 @@
  * they are plain types, not zod schemas.
  */
 
-import type { WorkspaceStatus, WorkspaceSummary } from "fleet-protocol";
+import type { SystemResources, WorkspaceStatus, WorkspaceSummary } from "fleet-protocol";
 
 /** Whether the bridge currently has a live `/events` connection to a ship. */
 export type ShipStatus = "online" | "offline";
@@ -25,6 +25,18 @@ export type BridgeWorkspaceSummary = WorkspaceSummary & { ship: string };
 
 /** `WorkspaceStatus` with `ship` guaranteed present on both variants. */
 export type BridgeWorkspaceStatus = WorkspaceStatus & { ship: string };
+
+/**
+ * One ship's entry in the aggregate `GET /system-resources`. `resources` is
+ * present when the ship is online and responded; otherwise `error` explains why
+ * (offline ships report neither — `resources` and `error` are both null).
+ */
+export interface ShipSystemResources {
+  readonly ship: string;
+  readonly status: ShipStatus;
+  readonly resources: SystemResources | null;
+  readonly error: string | null;
+}
 
 /** Fleet-wide identity of a workspace: `<repo>/<name>` (unique across all ships). */
 export function workspaceKey(repo: string, name: string): string {
