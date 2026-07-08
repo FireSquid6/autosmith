@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Git } from "git-bun";
@@ -166,5 +166,55 @@ suite("WorkspaceManager end-to-end", () => {
     const before = events.length;
     await manager.create({ repo: sourceRepo, name: "ws-events-2", branch: "main" });
     expect(events.length).toBe(before);
+  });
+
+  test("diffSummary counts working-tree changes and commits ahead", async () => {
+    const summary = await manager.create({ repo: sourceRepo, name: "ws-diff", branch: "main" });
+    await manager.activate(summary.repo, "ws-diff");
+
+    const wsDir = manager.workspaceDir(summary.repo, "ws-diff");
+    const git = new Git({ cwd: wsDir });
+    await git.setConfig("user.email", "test@example.com");
+    await git.setConfig("user.name", "Test");
+
+    // One commit ahead of origin/main…
+    await Bun.write(join(wsDir, "README.md"), "hello\nsecond\n");
+    await git.add();
+    await git.commit("second");
+    // …plus an uncommitted edit on top.
+    await Bun.write(join(wsDir, "README.md"), "hello\nsecond\nthird\n");
+
+    const status = await manager.get(summary.repo, "ws-diff");
+    expect(status.state).toBe("active");
+    if (status.state === "active") {
+      expect(status.diff.added).toBeGreaterThan(0);
+      expect(status.diff.commits).toBeGreaterThanOrEqual(1);
+    }
+
+    await manager.remove(summary.repo, "ws-diff");
+  });
+
+  test("create derives repo id from a .git URL basename", async () => {
+    const base = await mkdtemp(join(tmpdir(), "fleet-ship-proj-"));
+    const projRepo = join(base, "proj.git");
+    try {
+      const git = await Git.init(projRepo, { initialBranch: "main" });
+      await Bun.write(join(projRepo, "README.md"), "hi\n");
+      await git.add();
+      await git.setConfig("user.email", "test@example.com");
+      await git.setConfig("user.name", "Test");
+      await git.commit("initial");
+
+      const summary = await manager.create({ repo: projRepo, name: "c1", branch: "main" });
+      expect(summary.repo).toBe("proj");
+    } finally {
+      await rm(base, { recursive: true, force: true });
+    }
+  });
+
+  test("list skips directories that are not git working trees", async () => {
+    await mkdir(join(fleetDirectory, "junkrepo", "notaworkspace"), { recursive: true });
+    const all = await manager.list();
+    expect(all.some((w) => w.name === "notaworkspace")).toBe(false);
   });
 });

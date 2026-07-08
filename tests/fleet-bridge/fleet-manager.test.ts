@@ -1,127 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
-import type { SystemResources, WorkspaceSummary } from "fleet-protocol";
+import { join } from "node:path";
 import { BridgeError, FleetManager } from "../../apps/fleet-bridge/src/fleet-manager";
-import type { ShipConnectionDeps, SocketLike } from "../../apps/fleet-bridge/src/ship-connection";
 import { saveStore } from "../../apps/fleet-bridge/src/store";
-
-/** A ship the fakes will pretend exists at a given base URL. */
-interface FakeShip {
-  name: string;
-  workspaces: WorkspaceSummary[];
-}
-
-function repoBasename(repoUrlOrName: string): string {
-  const base = basename(repoUrlOrName);
-  return base.endsWith(".git") ? base.slice(0, -".git".length) : base;
-}
-
-/** Reduce a `ws://host/events` url back to its `http://host` base. */
-function httpBase(wsUrl: string): string {
-  const u = new URL(wsUrl);
-  u.protocol = u.protocol === "wss:" ? "https:" : "http:";
-  return u.origin;
-}
-
-/** A fake `/events` socket that emits one `sync` (or errors if the ship is absent). */
-class FakeSocket implements SocketLike {
-  /** Latest socket opened per ship base url, so a test can close it to force offline. */
-  static readonly byBase = new Map<string, FakeSocket>();
-
-  onopen: ((ev: unknown) => void) | null = null;
-  onmessage: ((ev: { data: unknown }) => void) | null = null;
-  onclose: ((ev: unknown) => void) | null = null;
-  onerror: ((ev: unknown) => void) | null = null;
-  private done = false;
-
-  constructor(wsUrl: string, ships: Map<string, FakeShip>) {
-    const base = httpBase(wsUrl);
-    FakeSocket.byBase.set(base, this);
-    const ship = ships.get(base);
-    setTimeout(() => {
-      if (this.done) return;
-      if (!ship) {
-        this.onerror?.({});
-        this.onclose?.({});
-        return;
-      }
-      this.onopen?.({});
-      this.onmessage?.({
-        data: JSON.stringify({
-          type: "sync",
-          ship: ship.name,
-          at: "2026-01-01T00:00:00.000Z",
-          workspaces: ship.workspaces,
-        }),
-      });
-    }, 0);
-  }
-
-  close(): void {
-    this.done = true;
-    this.onclose?.({});
-  }
-}
-
-/** A fake Eden client covering the ship endpoints the manager calls. */
-function makeFakeClient(httpUrl: string, ships: Map<string, FakeShip>) {
-  const ship = () => ships.get(httpUrl);
-  const workspacesFn: any = (params: { repo: string }) => (params2: { name: string }) => ({
-    get: async () => ({
-      data: { state: "inactive", repo: params.repo, name: params2.name, branch: "main" },
-      error: null,
-    }),
-    branch: { post: async () => ({ data: { ok: true }, error: null }) },
-    activate: { post: async () => ({ data: { ok: true }, error: null }) },
-    deactivate: { post: async () => ({ data: { ok: true }, error: null }) },
-    delete: async () => ({ data: { ok: true }, error: null }),
-  });
-  workspacesFn.get = async () => ({ data: [...(ship()?.workspaces ?? [])], error: null });
-  workspacesFn.post = async (body: { repo: string; name: string; branch: string }) => ({
-    data: { repo: repoBasename(body.repo), name: body.name, branch: body.branch, active: false },
-    error: null,
-  });
-  return {
-    workspaces: workspacesFn,
-    "system-resources": {
-      get: async () => ({ data: fakeResources(ship()?.name ?? "unknown"), error: null }),
-    },
-  };
-}
-
-/** A canned SystemResources snapshot tagged by hostname so tests can tell ships apart. */
-function fakeResources(hostname: string): SystemResources {
-  return {
-    uptimeSeconds: 1234,
-    os: {
-      type: "Linux",
-      platform: "linux",
-      release: "6.0.0",
-      version: "#1 SMP",
-      arch: "x64",
-      machine: "x86_64",
-      hostname,
-    },
-    cpu: { model: "Fake CPU", cores: 8, usage: 0.25, loadAverage: [0.1, 0.2, 0.3] },
-    memory: { total: 1000, free: 400, used: 600, usage: 0.6 },
-  };
-}
-
-function makeDeps(ships: Map<string, FakeShip>): Partial<ShipConnectionDeps> {
-  return {
-    createSocket: (url) => new FakeSocket(url, ships),
-    createClient: (url) => makeFakeClient(url, ships) as unknown as ReturnType<ShipConnectionDeps["createClient"]>,
-  };
-}
-
-const ws = (repo: string, name: string, active = false): WorkspaceSummary => ({
-  repo,
-  name,
-  branch: "main",
-  active,
-});
+import { FakeSocket, makeDeps, ws, type FakeShip } from "./helpers";
 
 describe("FleetManager", () => {
   let dir: string;
@@ -137,9 +20,22 @@ describe("FleetManager", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  function build(ships: Map<string, FakeShip>): FleetManager {
-    manager = new FleetManager({ dataDirectory: dir, port: 4800, name: "bridge" }, makeDeps(ships));
+  function build(ships: Map<string, FakeShip>, syncTimeoutMs?: number): FleetManager {
+    manager = new FleetManager({ dataDirectory: dir, port: 4800, name: "bridge" }, makeDeps(ships), {
+      syncTimeoutMs: syncTimeoutMs ?? 1000,
+    });
     return manager;
+  }
+
+  /** Register `ships` in the store and init a manager against them. */
+  async function boot(ships: Map<string, FakeShip>, syncTimeoutMs?: number): Promise<FleetManager> {
+    await saveStore(
+      dir,
+      [...ships.keys()].map((url) => ({ name: ships.get(url)!.name, url })),
+    );
+    const mgr = build(ships, syncTimeoutMs);
+    await mgr.init();
+    return mgr;
   }
 
   test("aggregates workspaces across ships, annotated with the owning ship", async () => {
@@ -334,5 +230,137 @@ describe("FleetManager", () => {
     await expect(mgr.activate("repo1", "one")).rejects.toMatchObject({ status: 503 });
 
     expect(BridgeError).toBeDefined();
+  });
+
+  // --- runtime event application --------------------------------------------
+
+  const evt = (type: string, ship: string, w: ReturnType<typeof ws>) => ({
+    type,
+    ship,
+    at: "2026-01-01T00:00:00.000Z",
+    workspace: w,
+  });
+
+  test("applies post-init change events into the aggregate index", async () => {
+    const ships = new Map<string, FakeShip>([
+      ["http://ship-a", { name: "ship-a", workspaces: [ws("repo1", "one")] }],
+    ]);
+    const mgr = await boot(ships);
+    const socket = FakeSocket.byBase.get("http://ship-a")!;
+
+    // created -> appears; branch_changed/activated -> upsert; removed -> gone.
+    socket.emit(evt("workspace.created", "ship-a", ws("repo1", "two")));
+    expect(mgr.listWorkspaces().map((w) => w.name).sort()).toEqual(["one", "two"]);
+
+    socket.emit(evt("workspace.activated", "ship-a", ws("repo1", "two", true)));
+    expect(mgr.listWorkspaces().find((w) => w.name === "two")?.active).toBe(true);
+
+    socket.emit(evt("workspace.removed", "ship-a", ws("repo1", "one")));
+    expect(mgr.listWorkspaces().map((w) => w.name)).toEqual(["two"]);
+  });
+
+  test("a fresh sync fully replaces a ship's contribution (resync)", async () => {
+    const ships = new Map<string, FakeShip>([
+      ["http://ship-a", { name: "ship-a", workspaces: [ws("repo1", "one"), ws("repo1", "two")] }],
+    ]);
+    const mgr = await boot(ships);
+    const socket = FakeSocket.byBase.get("http://ship-a")!;
+
+    // Reconnect delivers a new snapshot: "one" is gone, "three" is new.
+    socket.emit({
+      type: "sync",
+      ship: "ship-a",
+      at: "2026-01-01T00:00:01.000Z",
+      workspaces: [ws("repo1", "two"), ws("repo1", "three")],
+    });
+
+    expect(mgr.listWorkspaces().map((w) => w.name).sort()).toEqual(["three", "two"]);
+  });
+
+  test("runtime duplicate collision keeps the first owner (first-writer-wins)", async () => {
+    const ships = new Map<string, FakeShip>([
+      ["http://ship-a", { name: "ship-a", workspaces: [ws("repo1", "one")] }],
+      ["http://ship-b", { name: "ship-b", workspaces: [] }],
+    ]);
+    const mgr = await boot(ships);
+
+    // ship-b independently reports repo1/one — ship-a already owns it.
+    FakeSocket.byBase.get("http://ship-b")!.emit(evt("workspace.created", "ship-b", ws("repo1", "one")));
+
+    const rows = mgr.listWorkspaces().filter((w) => w.repo === "repo1" && w.name === "one");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.ship).toBe("ship-a");
+  });
+
+  // --- verb happy paths + error/offline translation -------------------------
+
+  test("switchBranch / deactivate / remove reach the owning ship", async () => {
+    const ships = new Map<string, FakeShip>([
+      ["http://ship-a", { name: "ship-a", workspaces: [ws("repo1", "one", true)] }],
+    ]);
+    const mgr = await boot(ships);
+
+    await expect(mgr.switchBranch("repo1", "one", "dev")).resolves.toBeUndefined();
+    await expect(mgr.deactivate("repo1", "one")).resolves.toBeUndefined();
+    await expect(mgr.remove("repo1", "one")).resolves.toBeUndefined();
+  });
+
+  test("surfaces a ship-side error with its status (call passthrough)", async () => {
+    const ships = new Map<string, FakeShip>([
+      [
+        "http://ship-a",
+        { name: "ship-a", workspaces: [ws("repo1", "one")], errorResponse: { status: 409, message: "boom" } },
+      ],
+    ]);
+    const mgr = await boot(ships);
+
+    await expect(mgr.switchBranch("repo1", "one", "dev")).rejects.toMatchObject({
+      status: 409,
+      message: "boom",
+    });
+  });
+
+  test("a network failure flips the ship offline and returns 503", async () => {
+    const ships = new Map<string, FakeShip>([
+      ["http://ship-a", { name: "ship-a", workspaces: [ws("repo1", "one")], throws: true }],
+    ]);
+    const mgr = await boot(ships);
+
+    await expect(mgr.activate("repo1", "one")).rejects.toMatchObject({ status: 503 });
+    expect(mgr.listShips()[0]?.status).toBe("offline");
+  });
+
+  // --- add / startup timeout ------------------------------------------------
+
+  test("addShip returns 502 when the ship never syncs", async () => {
+    const ships = new Map<string, FakeShip>([
+      ["http://ship-a", { name: "ship-a", workspaces: [] }],
+      ["http://ship-b", { name: "ship-b", workspaces: [], neverSync: true }],
+    ]);
+    // Only ship-a is persisted; ship-b is reachable-but-silent and added at runtime.
+    await saveStore(dir, [{ name: "ship-a", url: "http://ship-a" }]);
+    const mgr = build(ships, 50);
+    await mgr.init();
+
+    await expect(mgr.addShip("http://ship-b")).rejects.toMatchObject({ status: 502 });
+    expect(mgr.listShips().map((s) => s.name)).toEqual(["ship-a"]);
+  });
+
+  test("a persisted ship that is unreachable at startup stays offline (no abort)", async () => {
+    // Only ship-a is reachable (present in the fakes map); ship-b's socket never opens.
+    const ships = new Map<string, FakeShip>([
+      ["http://ship-a", { name: "ship-a", workspaces: [ws("repo1", "one")] }],
+    ]);
+    await saveStore(dir, [
+      { name: "ship-a", url: "http://ship-a" },
+      { name: "ship-b", url: "http://ship-b" },
+    ]);
+    const mgr = build(ships, 50);
+    await mgr.init();
+
+    const byName = Object.fromEntries(mgr.listShips().map((s) => [s.name, s.status]));
+    expect(byName["ship-a"]).toBe("online");
+    expect(byName["ship-b"]).toBe("offline");
+    expect(mgr.listWorkspaces().map((w) => w.name)).toEqual(["one"]);
   });
 });

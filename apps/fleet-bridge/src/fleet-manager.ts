@@ -61,12 +61,16 @@ export class FleetManager {
   /** Fleet-wide ownership: `<repo>/<name>` → owning ship name. */
   private readonly index = new Map<string, string>();
   private readonly deps?: Partial<ShipConnectionDeps>;
+  /** How long to wait for a ship's first `sync` (overridable in tests). */
+  private readonly syncTimeoutMs: number;
 
   constructor(
     private readonly config: BridgeConfig,
     deps?: Partial<ShipConnectionDeps>,
+    opts?: { syncTimeoutMs?: number },
   ) {
     this.deps = deps;
+    this.syncTimeoutMs = opts?.syncTimeoutMs ?? SYNC_TIMEOUT_MS;
   }
 
   /**
@@ -87,7 +91,7 @@ export class FleetManager {
     // Wait for reachable ships to send their first sync (or time out → offline).
     await Promise.all(
       [...this.connections.values()].map((conn) =>
-        conn.waitForSync(SYNC_TIMEOUT_MS).then(
+        conn.waitForSync(this.syncTimeoutMs).then(
           () => undefined,
           () => undefined,
         ),
@@ -134,7 +138,7 @@ export class FleetManager {
 
     let name: string;
     try {
-      const sync = await probe.waitForSync(SYNC_TIMEOUT_MS);
+      const sync = await probe.waitForSync(this.syncTimeoutMs);
       name = sync.ship;
     } catch (err) {
       probe.close();
