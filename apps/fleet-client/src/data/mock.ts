@@ -241,6 +241,3 @@ export class MockFleetBridge implements FleetBridge {
     return lines;
   }
 }
-
-/** Singleton the app talks to. Swap for an Eden-backed impl to go live. */
-export const bridge: FleetBridge = new MockFleetBridge();

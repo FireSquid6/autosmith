@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { bridge } from "./mock";
+import { bridge } from "./bridge";
 import type { FleetRepo, LogLine, Ship, Workspace, WorkspaceDetail } from "./types";
 
 interface FleetValue {
@@ -7,6 +7,8 @@ interface FleetValue {
   repos: FleetRepo[];
   workspaces: Workspace[];
   loading: boolean;
+  /** Set when talking to the bridge fails (e.g. it is unreachable). */
+  error: string | null;
   /** Number of active workspaces across the fleet (drives "N sessions live"). */
   liveCount: number;
   activate: (repo: string, name: string) => Promise<void>;
@@ -28,16 +30,22 @@ export function FleetProvider({ children }: { children: ReactNode }) {
   const [repos, setRepos] = useState<FleetRepo[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const [s, r, w] = await Promise.all([bridge.listShips(), bridge.listRepos(), bridge.listWorkspaces()]);
-      if (cancelled) return;
-      setShips(s);
-      setRepos(r);
-      setWorkspaces(w);
-      setLoading(false);
+      try {
+        const [s, r, w] = await Promise.all([bridge.listShips(), bridge.listRepos(), bridge.listWorkspaces()]);
+        if (cancelled) return;
+        setShips(s);
+        setRepos(r);
+        setWorkspaces(w);
+      } catch (e) {
+        if (!cancelled) setError((e as Error).message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     })();
     return () => {
       cancelled = true;
@@ -50,16 +58,24 @@ export function FleetProvider({ children }: { children: ReactNode }) {
 
   const activate = useCallback(
     async (repo: string, name: string) => {
-      await bridge.activateWorkspace(repo, name);
-      await refresh();
+      try {
+        await bridge.activateWorkspace(repo, name);
+        await refresh();
+      } catch (e) {
+        setError((e as Error).message);
+      }
     },
     [refresh],
   );
 
   const deactivate = useCallback(
     async (repo: string, name: string) => {
-      await bridge.deactivateWorkspace(repo, name);
-      await refresh();
+      try {
+        await bridge.deactivateWorkspace(repo, name);
+        await refresh();
+      } catch (e) {
+        setError((e as Error).message);
+      }
     },
     [refresh],
   );
@@ -76,6 +92,7 @@ export function FleetProvider({ children }: { children: ReactNode }) {
     repos,
     workspaces,
     loading,
+    error,
     liveCount: workspaces.filter((w) => w.active).length,
     activate,
     deactivate,
