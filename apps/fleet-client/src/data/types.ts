@@ -35,22 +35,3 @@ export type Workspace = WorkspaceSummary & { readonly ship: string };
 
 /** Detail: `WorkspaceStatus` with `ship` guaranteed on both variants. */
 export type WorkspaceDetail = WorkspaceStatus & { readonly ship: string };
-
-/** Kind of terminal log line, used to color it against the fixed palette. */
-export type LineType =
-  | "sys"
-  | "agent"
-  | "cmd"
-  | "out"
-  | "ok"
-  | "warn"
-  | "add"
-  | "del"
-  | "err"
-  | "blank";
-
-/** One rendered line of an agent session transcript. */
-export interface LogLine {
-  readonly type: LineType;
-  readonly text: string;
-}

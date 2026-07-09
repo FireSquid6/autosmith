@@ -1,4 +1,4 @@
-import { serve } from "bun";
+import { serve, type Server, type ServerWebSocket } from "bun";
 import index from "./index.html";
 
 /**
@@ -6,15 +6,38 @@ import index from "./index.html";
  * `BRIDGE_URL` env var; defaults to a local bridge.
  */
 const BRIDGE_URL = (process.env.BRIDGE_URL ?? "http://localhost:4700").replace(/\/$/, "");
+const BRIDGE_WS_URL = BRIDGE_URL.replace(/^http/, "ws");
+
+/** Per-connection state for a proxied `/bridge/*` WebSocket. */
+interface BridgeWsData {
+  upstream: WebSocket;
+  /** Frames the browser sent before `upstream` reached OPEN (e.g. the terminal's first `init`). */
+  buffer: string[];
+}
+
+/** Strip the `/bridge` prefix, preserving path + query (defaults to `/`). */
+function bridgePath(url: URL): string {
+  return (url.pathname.replace(/^\/bridge/, "") || "/") + url.search;
+}
 
 /**
  * Reverse-proxy `/bridge/<path>` → `${BRIDGE_URL}/<path>`. The browser's Eden
  * treaty talks to this same-origin prefix, so the bridge needs no CORS config.
+ * WebSocket upgrades (the terminal stream) are proxied too — Bun `fetch` can't
+ * forward an upgrade, so we open our own upstream socket and pipe frames.
  */
-async function proxyToBridge(req: Request): Promise<Response> {
+async function proxyToBridge(req: Request, server: Server<BridgeWsData>): Promise<Response | undefined> {
   const url = new URL(req.url);
-  const target = BRIDGE_URL + (url.pathname.replace(/^\/bridge/, "") || "/") + url.search;
+  const path = bridgePath(url);
 
+  if (req.headers.get("upgrade") === "websocket") {
+    const upstream = new WebSocket(BRIDGE_WS_URL + path);
+    const data: BridgeWsData = { upstream, buffer: [] };
+    if (!server.upgrade(req, { data })) return new Response("Upgrade failed", { status: 500 });
+    return undefined;
+  }
+
+  const target = BRIDGE_URL + path;
   const headers = new Headers(req.headers);
   headers.delete("host");
 
@@ -38,6 +61,47 @@ const server = serve({
     // SPA: every other path resolves to the client bundle so react-router can
     // handle deep links (e.g. /repos/api-gateway/workspaces/ws-4f2a) on refresh.
     "/*": index,
+  },
+
+  // Dumb bidirectional pipe between the browser and the real bridge. Buffer
+  // client frames until the upstream socket is open so the first `init` isn't
+  // lost (mirrors the bridge→ship proxy in fleet-bridge's workspaces plugin).
+  websocket: {
+    open(ws: ServerWebSocket<BridgeWsData>) {
+      const { upstream, buffer } = ws.data;
+      upstream.onopen = () => {
+        for (const frame of buffer) upstream.send(frame);
+        buffer.length = 0;
+      };
+      upstream.onmessage = (ev) => ws.send(typeof ev.data === "string" ? ev.data : String(ev.data));
+      upstream.onclose = () => {
+        try {
+          ws.close();
+        } catch {
+          // already closed
+        }
+      };
+      upstream.onerror = () => {
+        try {
+          ws.close();
+        } catch {
+          // already closed
+        }
+      };
+    },
+    message(ws: ServerWebSocket<BridgeWsData>, message) {
+      const { upstream, buffer } = ws.data;
+      const frame = typeof message === "string" ? message : message.toString();
+      if (upstream.readyState === WebSocket.OPEN) upstream.send(frame);
+      else buffer.push(frame);
+    },
+    close(ws: ServerWebSocket<BridgeWsData>) {
+      try {
+        ws.data.upstream.close();
+      } catch {
+        // already closed
+      }
+    },
   },
 
   development: process.env.NODE_ENV !== "production" && {

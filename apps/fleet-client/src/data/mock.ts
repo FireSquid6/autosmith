@@ -1,11 +1,12 @@
 import type { WorkspaceDiff } from "fleet-protocol";
 import type { FleetBridge } from "./provider";
-import type { FleetRepo, LogLine, Ship, Workspace, WorkspaceDetail } from "./types";
+import type { FleetRepo, Ship, Workspace, WorkspaceDetail } from "./types";
 
 /**
- * In-memory implementation of {@link FleetBridge}. Seed data and the canned
- * session transcripts are ported from the design prototype (`support.js`); the
- * `active` flags are mutable so activate/deactivate persist for the session.
+ * In-memory implementation of {@link FleetBridge}. Seed data is ported from the
+ * design prototype (`support.js`); the `active` flags are mutable so
+ * activate/deactivate persist for the session. The live terminal is not mocked —
+ * it streams over a real WebSocket (see the Terminal component's `useWebterm`).
  */
 
 const SHIPS: Ship[] = [
@@ -32,78 +33,6 @@ const SEED_WORKSPACES: Workspace[] = [
   { name: "ws-e812", repo: "mobile-bff", ship: "nimbus", branch: "feat/push", active: true },
 ];
 
-const TASKS: Record<string, string> = {
-  main: "scheduled verification — no open task",
-  "fix/rate-limit": "Fix limiter dropping burst traffic above 200 rps",
-  "release/2.3": "Cut release 2.3 and tag build artifacts",
-  "feat/oauth-pkce": "Implement OAuth 2.1 PKCE authorization flow",
-  "feat/redesign": "Rebuild dashboard shell on the new grid system",
-  "hotfix/csp": "Patch CSP header blocking inline styles",
-  "spike/backfill": "Prototype nightly backfill job",
-  "feat/push": "Add APNs / FCM push notification delivery",
-};
-
-const PATCHES: Record<string, LogLine[]> = {
-  main: [
-    { type: "agent", text: "agent  ▸ no open task — running scheduled verification" },
-    { type: "cmd", text: "$ git log --oneline -3" },
-    { type: "out", text: "a1b2c3d  chore: bump dependencies" },
-    { type: "out", text: "e4f5a6b  fix: null guard in client" },
-    { type: "out", text: "c7d8e9f  docs: update readme" },
-  ],
-  "fix/rate-limit": [
-    { type: "agent", text: "agent  ▸ editing src/middleware/rateLimit.ts" },
-    { type: "del", text: "-  const bucket = new TokenBucket({ rate: 200 })" },
-    { type: "add", text: "+  const bucket = new TokenBucket({ rate: 200, burst: 40 })" },
-    { type: "agent", text: "agent  ▸ added regression test for burst window" },
-  ],
-  "release/2.3": [
-    { type: "agent", text: "agent  ▸ verifying changelog and version bump" },
-    { type: "cmd", text: "$ npm version 2.3.0 --no-git-tag-version" },
-    { type: "out", text: "v2.3.0" },
-    { type: "warn", text: "!  awaiting sign-off before tagging release" },
-  ],
-  "feat/oauth-pkce": [
-    { type: "agent", text: "agent  ▸ scaffolding src/auth/pkce.ts" },
-    { type: "add", text: "+  export function challenge(verifier: string)" },
-    { type: "add", text: "+    return base64url(sha256(verifier))" },
-    { type: "warn", text: "!  TODO: wire /authorize redirect params" },
-  ],
-  "feat/redesign": [
-    { type: "agent", text: "agent  ▸ rebuilding src/app/Shell.tsx on new grid" },
-    { type: "del", text: '-  <div className="sidebar-old">' },
-    { type: "add", text: "+  <nav className=\"rail\" data-cols={4}>" },
-    { type: "agent", text: "agent  ▸ migrating 6 views to grid layout" },
-  ],
-  "hotfix/csp": [
-    { type: "agent", text: "agent  ▸ patching server/headers.ts" },
-    { type: "del", text: "-  \"style-src 'self'\"" },
-    { type: "add", text: "+  \"style-src 'self' 'nonce-…'\"" },
-    { type: "ok", text: "✓ inline styles no longer blocked" },
-  ],
-  "spike/backfill": [
-    { type: "agent", text: "agent  ▸ prototyping jobs/backfill.ts" },
-    { type: "cmd", text: "$ node jobs/backfill.ts --dry-run --since=30d" },
-    { type: "out", text: "scanned 1.2M rows · 0 written (dry-run)" },
-    { type: "warn", text: "!  spike only — not wired to scheduler" },
-  ],
-  "feat/push": [
-    { type: "agent", text: "agent  ▸ adding push/apns.ts and push/fcm.ts" },
-    { type: "add", text: "+  await apns.send(token, payload)" },
-    { type: "add", text: "+  await fcm.send(token, payload)" },
-    { type: "agent", text: "agent  ▸ registering delivery webhook" },
-  ],
-};
-
-const DEFAULT_PATCH: LogLine[] = [
-  { type: "agent", text: "agent  ▸ inspecting recent commits" },
-  { type: "cmd", text: "$ git log --oneline -2" },
-  { type: "out", text: "a1b2c3d  chore: bump deps" },
-  { type: "out", text: "e4f5g6h  refactor: extract client" },
-];
-
-const BLANK: LogLine = { type: "blank", text: " " };
-
 function key(repo: string, name: string): string {
   return `${repo}/${name}`;
 }
@@ -121,42 +50,8 @@ function mockDiff(name: string): WorkspaceDiff {
   return { added: 8 + (h % 40), removed: h % 15, commits: 1 + (h % 3) };
 }
 
-function taskFor(branch: string): string {
-  return TASKS[branch] ?? `Investigate failing checks on ${branch}`;
-}
-
-function patchLines(branch: string): LogLine[] {
-  return PATCHES[branch] ?? DEFAULT_PATCH;
-}
-
-function buildLog(w: Workspace): LogLine[] {
-  const pid = hashPid(w.name);
-  const head: LogLine[] = [
-    { type: "sys", text: `● session attached  ·  ${w.ship}  ·  pid ${pid}  ·  ${w.repo}@${w.branch}` },
-    { type: "sys", text: "● orchestra-agent 0.9.2  ·  model sonnet-4.5  ·  ctx 148k / 200k" },
-    BLANK,
-    { type: "agent", text: `agent  ▸ task — ${taskFor(w.branch)}` },
-    { type: "cmd", text: "$ git fetch origin && git status -sb" },
-    { type: "out", text: `## ${w.branch}...origin/${w.branch}` },
-    BLANK,
-  ];
-  const tail: LogLine[] = [
-    BLANK,
-    { type: "cmd", text: "$ npm run test -- --changed" },
-    { type: "out", text: "  Test Suites: 3 passed, 3 total" },
-    { type: "ok", text: "  Tests:       27 passed, 27 total   (2.4s)" },
-    { type: "cmd", text: "$ npm run lint" },
-    { type: "ok", text: "✓ 0 problems" },
-    BLANK,
-    { type: "agent", text: "agent  ▸ 3 files changed — awaiting your review" },
-  ];
-  return [...head, ...patchLines(w.branch), ...tail];
-}
-
 export class MockFleetBridge implements FleetBridge {
   private readonly workspaces: Workspace[] = SEED_WORKSPACES.map((w) => ({ ...w }));
-  /** Operator-typed lines appended to a session, keyed by `repo/name`. */
-  private readonly appended = new Map<string, LogLine[]>();
 
   private find(repo: string, name: string): Workspace {
     const w = this.workspaces.find((x) => x.repo === repo && x.name === name);
@@ -224,20 +119,5 @@ export class MockFleetBridge implements FleetBridge {
 
   async deactivateWorkspace(repo: string, name: string): Promise<void> {
     this.find(repo, name).active = false;
-  }
-
-  async openSession(repo: string, name: string): Promise<LogLine[]> {
-    const w = this.find(repo, name);
-    return [...buildLog(w), ...(this.appended.get(key(repo, name)) ?? [])];
-  }
-
-  async sendCommand(repo: string, name: string, cmd: string): Promise<LogLine[]> {
-    const lines: LogLine[] = [
-      { type: "cmd", text: `$ ${cmd}` },
-      { type: "sys", text: "↳ forwarded to agent session" },
-    ];
-    const k = key(repo, name);
-    this.appended.set(k, [...(this.appended.get(k) ?? []), ...lines]);
-    return lines;
   }
 }

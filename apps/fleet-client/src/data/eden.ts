@@ -1,7 +1,7 @@
 import type { SystemResources } from "fleet-protocol";
 import { makeBridgeClient, type BridgeClient } from "./client";
 import type { FleetBridge } from "./provider";
-import type { FleetRepo, LogLine, Ship, Workspace, WorkspaceDetail } from "./types";
+import type { FleetRepo, Ship, Workspace, WorkspaceDetail } from "./types";
 
 /** Turn an Eden `{ error }` value into a thrown Error. */
 function edenError(error: { status?: unknown; value?: unknown }): Error {
@@ -18,8 +18,8 @@ function deriveSpec(r: SystemResources | null): string {
 
 /**
  * Real {@link FleetBridge} backed by an Eden treaty against the fleet bridge.
- * Terminal streaming (openSession/sendCommand) is intentionally left unwired for
- * now — those return informational placeholders.
+ * The live terminal is a WebSocket stream, handled separately by the Terminal
+ * component (see `useWebterm`), not through this request/response surface.
  */
 export class EdenFleetBridge implements FleetBridge {
   constructor(private readonly client: BridgeClient = makeBridgeClient()) {}
@@ -61,19 +61,5 @@ export class EdenFleetBridge implements FleetBridge {
   async deactivateWorkspace(repo: string, name: string): Promise<void> {
     const { error } = await this.client.workspaces({ repo })({ name }).deactivate.post();
     if (error) throw edenError(error);
-  }
-
-  async openSession(): Promise<LogLine[]> {
-    return [
-      { type: "sys", text: "● session attached" },
-      { type: "sys", text: "● terminal streaming not yet wired to the bridge" },
-    ];
-  }
-
-  async sendCommand(_repo: string, _name: string, cmd: string): Promise<LogLine[]> {
-    return [
-      { type: "cmd", text: `$ ${cmd}` },
-      { type: "sys", text: "↳ terminal not connected — command not forwarded" },
-    ];
   }
 }

@@ -1,4 +1,4 @@
-import type { FleetRepo, LogLine, Ship, Workspace, WorkspaceDetail } from "./types";
+import type { FleetRepo, Ship, Workspace, WorkspaceDetail } from "./types";
 
 /**
  * The data our UI needs from the fleet bridge, expressed as one async surface.
@@ -28,18 +28,4 @@ export interface FleetBridge {
   activateWorkspace(repo: string, name: string): Promise<void>;
   /** `POST /workspaces/:repo/:name/deactivate` — kill the session. */
   deactivateWorkspace(repo: string, name: string): Promise<void>;
-  /**
-   * The current session transcript for a workspace.
-   *
-   * Stands in for the live session stream. In production this is the
-   * `/workspaces/:repo/:name/terminal` WebSocket (webterm grid protocol) and/or
-   * a future agent-output stream; here it returns a canned transcript.
-   */
-  openSession(repo: string, name: string): Promise<LogLine[]>;
-  /**
-   * Forward an operator command to the session. Placeholder per the design
-   * handoff — the real agent-control protocol replaces this. Returns the lines
-   * appended to the transcript.
-   */
-  sendCommand(repo: string, name: string, cmd: string): Promise<LogLine[]>;
 }

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { bridge } from "./bridge";
-import type { FleetRepo, LogLine, Ship, Workspace, WorkspaceDetail } from "./types";
+import type { FleetRepo, Ship, Workspace, WorkspaceDetail } from "./types";
 
 interface FleetValue {
   ships: Ship[];
@@ -14,8 +14,6 @@ interface FleetValue {
   activate: (repo: string, name: string) => Promise<void>;
   deactivate: (repo: string, name: string) => Promise<void>;
   getWorkspace: (repo: string, name: string) => Promise<WorkspaceDetail>;
-  openSession: (repo: string, name: string) => Promise<LogLine[]>;
-  sendCommand: (repo: string, name: string, cmd: string) => Promise<LogLine[]>;
 }
 
 const FleetContext = createContext<FleetValue | null>(null);
@@ -81,11 +79,6 @@ export function FleetProvider({ children }: { children: ReactNode }) {
   );
 
   const getWorkspace = useCallback((repo: string, name: string) => bridge.getWorkspace(repo, name), []);
-  const openSession = useCallback((repo: string, name: string) => bridge.openSession(repo, name), []);
-  const sendCommand = useCallback(
-    (repo: string, name: string, cmd: string) => bridge.sendCommand(repo, name, cmd),
-    [],
-  );
 
   const value: FleetValue = {
     ships,
@@ -97,8 +90,6 @@ export function FleetProvider({ children }: { children: ReactNode }) {
     activate,
     deactivate,
     getWorkspace,
-    openSession,
-    sendCommand,
   };
 
   return <FleetContext.Provider value={value}>{children}</FleetContext.Provider>;

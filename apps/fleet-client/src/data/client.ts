@@ -19,3 +19,12 @@ export function bridgeBaseUrl(): string {
 export function makeBridgeClient(url: string = bridgeBaseUrl()): BridgeClient {
   return treaty<App>(url);
 }
+
+/**
+ * WebSocket URL for a bridge path (e.g. `/workspaces/:repo/:name/terminal`).
+ * Same-origin as {@link bridgeBaseUrl} — the fleet-client server proxies the
+ * upgrade through to the real bridge — so `http(s)` just becomes `ws(s)`.
+ */
+export function wsBridgeUrl(path: string): string {
+  return bridgeBaseUrl().replace(/^http/, "ws") + path;
+}

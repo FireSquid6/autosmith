@@ -55,7 +55,7 @@ export class WorkspaceManager {
   private readonly listeners = new Set<(event: FleetEvent) => void>();
 
   constructor(private readonly config: FleetShipConfig) {
-    this.tmux = new Tmux({ namespace: TMUX_NAMESPACE, configFile: "/dev/null" });
+    this.tmux = new Tmux({ namespace: TMUX_NAMESPACE });
   }
 
   /**
