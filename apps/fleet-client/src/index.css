@@ -2,44 +2,34 @@
 
 @layer base {
   :root {
-    @apply font-sans;
+    @apply font-prose;
+  }
+
+  html,
+  body,
+  #root {
+    @apply h-full;
   }
 
   body {
-    @apply grid place-items-center min-w-[320px] min-h-screen relative m-0 bg-background text-foreground;
+    @apply m-0 bg-bg text-text;
   }
 }
 
-/* cool Bun background animation 😎 */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  opacity: 0.05;
-  background: url("./logo.svg");
-  background-size: 256px;
-  transform: rotate(-12deg) scale(1.35);
-  animation: slide 30s linear infinite;
-  pointer-events: none;
-}
-
-@keyframes slide {
-  from {
-    background-position: 0 0;
+/* Terminal caret — a solid block that blinks like a TTY cursor. */
+@keyframes blink {
+  0%,
+  55% {
+    opacity: 1;
   }
-  to {
-    background-position: 256px 224px;
+  56%,
+  100% {
+    opacity: 0;
   }
 }
 
-@keyframes spin {
-  from {
-    transform: rotate(0);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.term-caret {
+  animation: blink 1.1s step-end infinite;
 }
 
 @media (prefers-reduced-motion) {

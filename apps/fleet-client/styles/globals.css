@@ -118,3 +118,72 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Bridge design system — the terminal/technical look from the design handoff.
+ * The theme-switched tokens live in :root (light) / .dark (dark) below; here we
+ * expose them (plus a fixed terminal palette and the two design fonts) as
+ * Tailwind utilities so components can write `bg-panel`, `text-dim`, `font-mono`,
+ * `text-term-agent`, etc. The terminal palette is intentionally NOT theme-aware —
+ * a session console stays dark in both themes for authenticity.
+ * ------------------------------------------------------------------------- */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-panel2: var(--panel2);
+  --color-line: var(--line);
+  --color-text: var(--text);
+  --color-dim: var(--dim);
+  --color-dim2: var(--dim2);
+  /* --color-accent is already mapped to var(--accent) by the shadcn block above;
+     we override --accent to the design's locked green in :root / .dark. */
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
+
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-prose: "IBM Plex Sans", system-ui, sans-serif;
+
+  --color-term-bg: #0a0d10;
+  --color-term-chrome: #0e1116;
+  --color-term-line: #1c222b;
+  --color-term-out: #c9d1d9;
+  --color-term-sys: #6e7681;
+  --color-term-agent: #58a6ff;
+  --color-term-cmd: #3fb950;
+  --color-term-warn: #d29922;
+  --color-term-err: #f85149;
+  --color-term-footer: #5a636e;
+}
+
+:root {
+  /* Bridge — light */
+  --bg: #eceeec;
+  --panel: #ffffff;
+  --panel2: #f4f6f5;
+  --line: #d7dbd9;
+  --text: #191d23;
+  --dim: #5b626b;
+  --dim2: #9198a0;
+  --accent: oklch(0.56 0.14 150);
+  --accent-soft: color-mix(in oklab, var(--accent) 14%, transparent);
+  --accent-line: color-mix(in oklab, var(--accent) 30%, var(--line));
+
+  /* Workspace node (outline style) — resolved from --accent/--line, so shared. */
+  --node-bg: transparent;
+  --node-bg-active: color-mix(in oklab, var(--accent) 9%, transparent);
+  --node-border: 1px solid var(--line);
+  --node-border-active: 1px solid var(--accent);
+  --node-radius: 4px;
+}
+
+.dark {
+  /* Bridge — dark (default) */
+  --bg: #0a0c0e;
+  --panel: #12151a;
+  --panel2: #171b21;
+  --line: #252b33;
+  --text: #ced5de;
+  --dim: #818994;
+  --dim2: #59606a;
+  --accent: oklch(0.8 0.15 150);
+}
