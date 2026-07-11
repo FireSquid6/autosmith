@@ -25,6 +25,7 @@ import {
   type ShipSystemResources,
 } from "./types";
 import { getDb, type Db } from "./db";
+import { ShipService } from "./services/ship-service";
 
 /** A typed error carrying the HTTP status the API layer should map it to. */
 export class BridgeError extends Error {
@@ -64,14 +65,17 @@ export class FleetManager {
   private readonly deps?: Partial<ShipConnectionDeps>;
   /** How long to wait for a ship's first `sync` (overridable in tests). */
   private readonly syncTimeoutMs: number;
+  /** Roster persistence. Tests inject a shared in-memory `Db` via `opts.db`. */
+  private readonly ships: ShipService;
 
   constructor(
     private readonly config: BridgeConfig,
     deps?: Partial<ShipConnectionDeps>,
-    opts?: { syncTimeoutMs?: number },
+    opts?: { syncTimeoutMs?: number; db?: Db },
   ) {
     this.deps = deps;
     this.syncTimeoutMs = opts?.syncTimeoutMs ?? SYNC_TIMEOUT_MS;
+    this.ships = new ShipService(opts?.db ?? getDb(config));
   }
 
   /**
@@ -81,7 +85,7 @@ export class FleetManager {
    * the background.
    */
   async init(): Promise<void> {
-    const records = await loadStore(this.config.dataDirectory);
+    const records = await this.ships.getAllShips();
     for (const record of records) {
       const conn = this.createConnection(record.url, record.name);
       conn.member = true;
@@ -489,10 +493,8 @@ export class FleetManager {
   }
 
   private async persist(): Promise<void> {
-    const ships: ShipRecord[] = [...this.connections.values()].map((conn) => ({
-      name: conn.name,
-      url: conn.url,
-    }));
-    await saveStore(this.config.dataDirectory, ships);
+    await this.ships.replaceAll(
+      [...this.connections.values()].map((conn) => ({ name: conn.name, url: conn.url })),
+    );
   }
 }

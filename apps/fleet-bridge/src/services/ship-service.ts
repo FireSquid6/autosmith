@@ -65,4 +65,16 @@ export class ShipService {
 
     return deleted
   }
+
+  /**
+   * Overwrite the entire ship roster in one transaction (clear, then re-insert).
+   * The callback is synchronous because `bun:sqlite` transactions cannot span an
+   * `await`; an empty `ships` clears the table without an (illegal) empty insert.
+   */
+  async replaceAll(ships: schema.InsertShip[]): Promise<void> {
+    this.db.transaction((tx) => {
+      tx.delete(schema.shipsTable).run()
+      for (const ship of ships) tx.insert(schema.shipsTable).values(ship).run()
+    })
+  }
 }

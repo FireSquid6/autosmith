@@ -13,7 +13,8 @@ import { join } from "node:path";
 import type { Server } from "bun";
 import { FleetManager } from "../../apps/fleet-bridge/src/fleet-manager";
 import { createApp } from "../../apps/fleet-bridge/src/api";
-import { saveStore } from "../../apps/fleet-bridge/src/store";
+import { getDb } from "../../apps/fleet-bridge/src/db";
+import { ShipService } from "../../apps/fleet-bridge/src/services/ship-service";
 import { FakeSocket, makeDeps, ws, type FakeShip } from "./helpers";
 
 const opened = (sock: WebSocket) =>
@@ -56,10 +57,11 @@ describe("bridge terminal proxy", () => {
     const ships = new Map<string, FakeShip>([
       [`http://localhost:${upstream.port}`, { name: "ship-a", workspaces: [ws("repo1", "w1")] }],
     ]);
-    await saveStore(dir, [{ name: "ship-a", url: `http://localhost:${upstream.port}` }]);
 
-    const config = { dataDirectory: dir, port: 4800, name: "bridge" };
-    manager = new FleetManager(config, makeDeps(ships), { syncTimeoutMs: 50 });
+    const config = { dataDirectory: dir, port: 4800, name: "bridge", ephemeralDb: true };
+    const db = getDb(config);
+    await new ShipService(db).createShip({ name: "ship-a", url: `http://localhost:${upstream.port}` });
+    manager = new FleetManager(config, makeDeps(ships), { syncTimeoutMs: 50, db });
     await manager.init();
 
     bridge = createApp(manager, config);

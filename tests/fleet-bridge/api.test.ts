@@ -10,7 +10,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FleetManager } from "../../apps/fleet-bridge/src/fleet-manager";
 import { createApp } from "../../apps/fleet-bridge/src/api";
-import { saveStore } from "../../apps/fleet-bridge/src/store";
+import { getDb } from "../../apps/fleet-bridge/src/db";
+import { ShipService } from "../../apps/fleet-bridge/src/services/ship-service";
 import { FakeSocket, makeDeps, ws, type FakeShip } from "./helpers";
 
 describe("bridge API", () => {
@@ -39,12 +40,12 @@ describe("bridge API", () => {
       ["http://ship-b", { name: "ship-b", workspaces: [ws("repo2", "two")] }],
       ["http://ship-c", { name: "ship-c", workspaces: [] }], // reachable, not yet added
     ]);
-    await saveStore(dir, [
-      { name: "ship-a", url: "http://ship-a" },
-      { name: "ship-b", url: "http://ship-b" },
-    ]);
-    const config = { dataDirectory: dir, port: 4800, name: "bridge" };
-    manager = new FleetManager(config, makeDeps(ships), { syncTimeoutMs: 50 });
+    const config = { dataDirectory: dir, port: 4800, name: "bridge", ephemeralDb: true };
+    const db = getDb(config);
+    const seed = new ShipService(db);
+    await seed.createShip({ name: "ship-a", url: "http://ship-a" });
+    await seed.createShip({ name: "ship-b", url: "http://ship-b" });
+    manager = new FleetManager(config, makeDeps(ships), { syncTimeoutMs: 50, db });
     await manager.init();
     app = createApp(manager, config);
   });

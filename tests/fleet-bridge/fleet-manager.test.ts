@@ -3,16 +3,20 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BridgeError, FleetManager } from "../../apps/fleet-bridge/src/fleet-manager";
-import { saveStore } from "../../apps/fleet-bridge/src/store";
+import { getDb, type Db } from "../../apps/fleet-bridge/src/db";
+import { ShipService } from "../../apps/fleet-bridge/src/services/ship-service";
 import { FakeSocket, makeDeps, ws, type FakeShip } from "./helpers";
 
 describe("FleetManager", () => {
   let dir: string;
+  let db: Db;
   let manager: FleetManager | undefined;
 
   beforeEach(async () => {
+    // `dir` is only a `dataDirectory` placeholder; the DB is in-memory (ephemeral).
     dir = await mkdtemp(join(tmpdir(), "fleet-bridge-mgr-"));
     FakeSocket.byBase.clear();
+    db = getDb({ dataDirectory: dir, port: 4800, name: "bridge", ephemeralDb: true });
   });
   afterEach(async () => {
     manager?.shutdown();
@@ -20,19 +24,24 @@ describe("FleetManager", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
+  /** Seed the roster into the shared in-memory DB the manager reads from. */
+  async function seed(rows: { name: string; url: string }[]): Promise<void> {
+    const ships = new ShipService(db);
+    for (const row of rows) await ships.createShip(row);
+  }
+
   function build(ships: Map<string, FakeShip>, syncTimeoutMs?: number): FleetManager {
-    manager = new FleetManager({ dataDirectory: dir, port: 4800, name: "bridge" }, makeDeps(ships), {
-      syncTimeoutMs: syncTimeoutMs ?? 1000,
-    });
+    manager = new FleetManager(
+      { dataDirectory: dir, port: 4800, name: "bridge", ephemeralDb: true },
+      makeDeps(ships),
+      { syncTimeoutMs: syncTimeoutMs ?? 1000, db },
+    );
     return manager;
   }
 
-  /** Register `ships` in the store and init a manager against them. */
+  /** Register `ships` in the DB and init a manager against them. */
   async function boot(ships: Map<string, FakeShip>, syncTimeoutMs?: number): Promise<FleetManager> {
-    await saveStore(
-      dir,
-      [...ships.keys()].map((url) => ({ name: ships.get(url)!.name, url })),
-    );
+    await seed([...ships.keys()].map((url) => ({ name: ships.get(url)!.name, url })));
     const mgr = build(ships, syncTimeoutMs);
     await mgr.init();
     return mgr;
@@ -43,7 +52,7 @@ describe("FleetManager", () => {
       ["http://ship-a", { name: "ship-a", workspaces: [ws("repo1", "one", true)] }],
       ["http://ship-b", { name: "ship-b", workspaces: [ws("repo2", "two")] }],
     ]);
-    await saveStore(dir, [
+    await seed([
       { name: "ship-a", url: "http://ship-a" },
       { name: "ship-b", url: "http://ship-b" },
     ]);
@@ -66,7 +75,7 @@ describe("FleetManager", () => {
       ["http://ship-a", { name: "ship-a", workspaces: [ws("repo1", "dup")] }],
       ["http://ship-b", { name: "ship-b", workspaces: [ws("repo1", "dup")] }],
     ]);
-    await saveStore(dir, [
+    await seed([
       { name: "ship-a", url: "http://ship-a" },
       { name: "ship-b", url: "http://ship-b" },
     ]);
@@ -80,7 +89,7 @@ describe("FleetManager", () => {
       ["http://ship-a", { name: "ship-a", workspaces: [ws("repo1", "one")] }],
       ["http://ship-b", { name: "ship-b", workspaces: [ws("repo1", "one")] }],
     ]);
-    await saveStore(dir, [{ name: "ship-a", url: "http://ship-a" }]);
+    await seed([{ name: "ship-a", url: "http://ship-a" }]);
 
     const mgr = build(ships);
     await mgr.init();
@@ -94,7 +103,7 @@ describe("FleetManager", () => {
       ["http://ship-a", { name: "ship-a", workspaces: [ws("repo1", "one")] }],
       ["http://ship-b", { name: "ship-b", workspaces: [ws("repo2", "two")] }],
     ]);
-    await saveStore(dir, [{ name: "ship-a", url: "http://ship-a" }]);
+    await seed([{ name: "ship-a", url: "http://ship-a" }]);
 
     const mgr = build(ships);
     await mgr.init();
@@ -103,16 +112,16 @@ describe("FleetManager", () => {
     expect(info).toMatchObject({ name: "ship-b", url: "http://ship-b", status: "online" });
     expect(mgr.listWorkspaces().map((w) => w.ship).sort()).toEqual(["ship-a", "ship-b"]);
 
-    // Persisted to disk.
-    const persisted = JSON.parse(await Bun.file(join(dir, "ships.json")).text());
-    expect(persisted.ships.map((s: { name: string }) => s.name).sort()).toEqual(["ship-a", "ship-b"]);
+    // Persisted to the roster DB.
+    const persisted = await new ShipService(db).getAllShips();
+    expect(persisted.map((s) => s.name).sort()).toEqual(["ship-a", "ship-b"]);
   });
 
   test("removeShip unregisters and drops its workspaces", async () => {
     const ships = new Map<string, FakeShip>([
       ["http://ship-a", { name: "ship-a", workspaces: [ws("repo1", "one")] }],
     ]);
-    await saveStore(dir, [{ name: "ship-a", url: "http://ship-a" }]);
+    await seed([{ name: "ship-a", url: "http://ship-a" }]);
 
     const mgr = build(ships);
     await mgr.init();
@@ -127,7 +136,7 @@ describe("FleetManager", () => {
     const ships = new Map<string, FakeShip>([
       ["http://ship-a", { name: "ship-a", workspaces: [ws("repo1", "one")] }],
     ]);
-    await saveStore(dir, [{ name: "ship-a", url: "http://ship-a" }]);
+    await seed([{ name: "ship-a", url: "http://ship-a" }]);
 
     const mgr = build(ships);
     await mgr.init();
@@ -155,7 +164,7 @@ describe("FleetManager", () => {
     const ships = new Map<string, FakeShip>([
       ["http://ship-a", { name: "ship-a", workspaces: [ws("repo1", "one")] }],
     ]);
-    await saveStore(dir, [{ name: "ship-a", url: "http://ship-a" }]);
+    await seed([{ name: "ship-a", url: "http://ship-a" }]);
 
     const mgr = build(ships);
     await mgr.init();
@@ -169,7 +178,7 @@ describe("FleetManager", () => {
     const ships = new Map<string, FakeShip>([
       ["http://ship-a", { name: "ship-a", workspaces: [] }],
     ]);
-    await saveStore(dir, [{ name: "ship-a", url: "http://ship-a" }]);
+    await seed([{ name: "ship-a", url: "http://ship-a" }]);
 
     const mgr = build(ships);
     await mgr.init();
@@ -185,7 +194,7 @@ describe("FleetManager", () => {
       ["http://ship-a", { name: "ship-a", workspaces: [] }],
       ["http://ship-b", { name: "ship-b", workspaces: [] }],
     ]);
-    await saveStore(dir, [
+    await seed([
       { name: "ship-a", url: "http://ship-a" },
       { name: "ship-b", url: "http://ship-b" },
     ]);
@@ -245,7 +254,7 @@ describe("FleetManager", () => {
     const ships = new Map<string, FakeShip>([
       ["http://ship-a", { name: "ship-a", workspaces: [ws("repo1", "one")] }],
     ]);
-    await saveStore(dir, [{ name: "ship-a", url: "http://ship-a" }]);
+    await seed([{ name: "ship-a", url: "http://ship-a" }]);
 
     const mgr = build(ships);
     await mgr.init();
@@ -369,7 +378,7 @@ describe("FleetManager", () => {
       ["http://ship-b", { name: "ship-b", workspaces: [], neverSync: true }],
     ]);
     // Only ship-a is persisted; ship-b is reachable-but-silent and added at runtime.
-    await saveStore(dir, [{ name: "ship-a", url: "http://ship-a" }]);
+    await seed([{ name: "ship-a", url: "http://ship-a" }]);
     const mgr = build(ships, 50);
     await mgr.init();
 
@@ -382,7 +391,7 @@ describe("FleetManager", () => {
     const ships = new Map<string, FakeShip>([
       ["http://ship-a", { name: "ship-a", workspaces: [ws("repo1", "one")] }],
     ]);
-    await saveStore(dir, [
+    await seed([
       { name: "ship-a", url: "http://ship-a" },
       { name: "ship-b", url: "http://ship-b" },
     ]);
