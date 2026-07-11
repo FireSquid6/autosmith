@@ -40,3 +40,8 @@ hmr: true,
 Rule of thumb: if deleting the comment loses no information a reader couldn't get
 from the code in a second, delete it. When a comment feels necessary to explain
 *what* the code does, prefer clearer names/structure over the comment.
+
+## Database
+Two **very important** rules for
+- API routes should never directly interact with drizzle ORM queries. They should always be locked behind some `ThingService` class.
+- **Never** do `import { ... } from "../src/db/schema.ts`. Always import as a namespace `import * as schema from "../src/db/schema.ts`.

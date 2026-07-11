@@ -15,7 +15,6 @@
 import { basename } from "node:path";
 import type { FleetEvent, RepoSummary, SystemResources, WorkspaceStatus, WorkspaceSummary } from "fleet-protocol";
 import { ShipConnection, toWsUrl, type ShipConnectionDeps } from "./ship-connection";
-import { loadStore, saveStore, type ShipRecord } from "./store";
 import type { BridgeConfig } from "./config";
 import {
   workspaceKey,
@@ -25,6 +24,7 @@ import {
   type ShipInfo,
   type ShipSystemResources,
 } from "./types";
+import { getDb, type Db } from "./db";
 
 /** A typed error carrying the HTTP status the API layer should map it to. */
 export class BridgeError extends Error {
