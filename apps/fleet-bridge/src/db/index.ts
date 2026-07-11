@@ -10,7 +10,9 @@ export function getDb(config: BridgeConfig) {
   const databasePath = path.join(config.dataDirectory, "bridge.sqlite"); 
   fs.mkdirSync(config.dataDirectory);
 
-  const sqlite = new Database(databasePath);
+  const sqlite = config.ephemeralDb === true 
+    ? new Database(":memory:") 
+    : new Database(databasePath);
 
   return drizzle(sqlite);
 }
