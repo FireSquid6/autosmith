@@ -1,22 +1,14 @@
-#!/usr/bin/env bun
-/**
- * index.ts — Fleet Bridge CLI entry point.
- *
- * Mirrors `fleet-ship`'s `start` command: load config, build the `FleetManager`
- * (connecting to persisted ships and enforcing the no-duplicate rule), then serve
- * the composed Elysia app.
- */
 
 import { Command } from "commander";
 import { loadConfig } from "./config";
 import { FleetManager } from "./fleet-manager";
 import { createApp } from "./api";
 
-const program = new Command();
+const bridge = new Command();
 
-program.name("fleet-bridge").description("Fleet Bridge — orchestrates multiple ships").version("0.1.0");
+bridge.name("bridge").description("Fleet Bridge — orchestrates multiple ships").version("0.1.0");
 
-program
+bridge
   .command("start")
   .description("start the Fleet Bridge HTTP + WebSocket API")
   .option("-c, --config <path>", "path to the fleet-bridge config yaml", "./fleet-bridge-config.yaml")
@@ -36,4 +28,4 @@ program
     console.log(`fleet-bridge "${config.name}" listening on http://localhost:${config.port}`);
   });
 
-program.parseAsync(process.argv);
+export { bridge };

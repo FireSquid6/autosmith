@@ -54,60 +54,64 @@ async function proxyToBridge(req: Request, server: Server<BridgeWsData>): Promis
   }
 }
 
-const server = serve({
-  routes: {
-    "/bridge/*": proxyToBridge,
 
-    // SPA: every other path resolves to the client bundle so react-router can
-    // handle deep links (e.g. /repos/api-gateway/workspaces/ws-4f2a) on refresh.
-    "/*": index,
-  },
+export function startClientServer() {
+  const server = serve({
+    routes: {
+      "/bridge/*": proxyToBridge,
 
-  // Dumb bidirectional pipe between the browser and the real bridge. Buffer
-  // client frames until the upstream socket is open so the first `init` isn't
-  // lost (mirrors the bridge→ship proxy in fleet-bridge's workspaces plugin).
-  websocket: {
-    open(ws: ServerWebSocket<BridgeWsData>) {
-      const { upstream, buffer } = ws.data;
-      upstream.onopen = () => {
-        for (const frame of buffer) upstream.send(frame);
-        buffer.length = 0;
-      };
-      upstream.onmessage = (ev) => ws.send(typeof ev.data === "string" ? ev.data : String(ev.data));
-      upstream.onclose = () => {
+      // SPA: every other path resolves to the client bundle so react-router can
+      // handle deep links (e.g. /repos/api-gateway/workspaces/ws-4f2a) on refresh.
+      "/*": index,
+    },
+
+    // Dumb bidirectional pipe between the browser and the real bridge. Buffer
+    // client frames until the upstream socket is open so the first `init` isn't
+    // lost (mirrors the bridge→ship proxy in fleet-bridge's workspaces plugin).
+    websocket: {
+      open(ws: ServerWebSocket<BridgeWsData>) {
+        const { upstream, buffer } = ws.data;
+        upstream.onopen = () => {
+          for (const frame of buffer) upstream.send(frame);
+          buffer.length = 0;
+        };
+        upstream.onmessage = (ev) => ws.send(typeof ev.data === "string" ? ev.data : String(ev.data));
+        upstream.onclose = () => {
+          try {
+            ws.close();
+          } catch {
+            // already closed
+          }
+        };
+        upstream.onerror = () => {
+          try {
+            ws.close();
+          } catch {
+            // already closed
+          }
+        };
+      },
+      message(ws: ServerWebSocket<BridgeWsData>, message) {
+        const { upstream, buffer } = ws.data;
+        const frame = typeof message === "string" ? message : message.toString();
+        if (upstream.readyState === WebSocket.OPEN) upstream.send(frame);
+        else buffer.push(frame);
+      },
+      close(ws: ServerWebSocket<BridgeWsData>) {
         try {
-          ws.close();
+          ws.data.upstream.close();
         } catch {
           // already closed
         }
-      };
-      upstream.onerror = () => {
-        try {
-          ws.close();
-        } catch {
-          // already closed
-        }
-      };
+      },
     },
-    message(ws: ServerWebSocket<BridgeWsData>, message) {
-      const { upstream, buffer } = ws.data;
-      const frame = typeof message === "string" ? message : message.toString();
-      if (upstream.readyState === WebSocket.OPEN) upstream.send(frame);
-      else buffer.push(frame);
-    },
-    close(ws: ServerWebSocket<BridgeWsData>) {
-      try {
-        ws.data.upstream.close();
-      } catch {
-        // already closed
-      }
-    },
-  },
 
-  development: process.env.NODE_ENV !== "production" && {
-    hmr: true,
-    console: true,
-  },
-});
+    development: process.env.NODE_ENV !== "production" && {
+      hmr: true,
+      console: true,
+    },
+  });
 
-console.log(`🚀 fleet-client running at ${server.url} (bridge → ${BRIDGE_URL})`);
+  console.log(`Started client on ${server.url}`);
+}
+

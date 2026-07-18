@@ -1,14 +1,13 @@
-#!/usr/bin/env bun
 import { Command } from "commander";
 import { loadConfig } from "./config";
 import { WorkspaceManager } from "./workspace-manager";
 import { createApp } from "./api";
 
-const program = new Command();
+const ship = new Command();
 
-program.name("fleet-ship").description("Fleet Ship workspace host").version("0.1.0");
+ship.name("ship").description("Fleet Ship workspace host").version("0.1.0");
 
-program
+ship
   .command("start")
   .description("start the Fleet Ship HTTP + WebSocket API")
   .option("-c, --config <path>", "path to the fleet-ship config yaml", "./fleet-ship-config.yaml")
@@ -20,4 +19,4 @@ program
     console.log(`fleet-ship "${config.name}" listening on http://localhost:${config.port}`);
   });
 
-program.parseAsync(process.argv);
+ship.parseAsync(process.argv);
