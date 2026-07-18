@@ -6,9 +6,9 @@
       "name": "autosmith",
       "devDependencies": {
         "@types/bun": "latest",
+        "bun-vt": "workspace:*",
         "fleet-protocol": "workspace:*",
         "git-bun": "workspace:*",
-        "libghostty-bun": "workspace:*",
         "webterm": "workspace:*",
       },
       "peerDependencies": {
@@ -162,7 +162,7 @@
     "packages/webterm": {
       "name": "webterm",
       "dependencies": {
-        "libghostty-bun": "workspace:*",
+        "bun-vt": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "latest",

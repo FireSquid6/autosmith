@@ -7,8 +7,8 @@ export const ship = new Command()
   .option("-c, --config <path>", "path to the fleet-ship config yaml", "./fleet-ship-config.yaml")
   .action(async (options: { config: string }) => {
     // Deferred so merely mounting this subcommand in the unified CLI doesn't
-    // eagerly pull in tmux-bun/webterm (and the native libghostty shim they
-    // load at import time). They're only needed when the ship actually runs.
+    // eagerly pull in tmux-bun/webterm. They're only needed when the ship
+    // actually runs.
     const { WorkspaceManager } = await import("./workspace-manager");
     const { createApp } = await import("./api");
 
