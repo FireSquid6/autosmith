@@ -18,12 +18,13 @@
   "dependencies": {
     "commander": "latest",
     "elysia": "latest",
-    "yaml": "latest",
-    "zod": "latest",
-    "tmux-bun": "workspace:*",
-    "git-bun": "workspace:*",
     "fleet-protocol": "workspace:*",
-    "webterm": "workspace:*"
+    "git-bun": "workspace:*",
+    "logestic": "^1.2.4",
+    "tmux-bun": "workspace:*",
+    "webterm": "workspace:*",
+    "yaml": "latest",
+    "zod": "latest"
   },
   "devDependencies": {
     "@types/bun": "latest"

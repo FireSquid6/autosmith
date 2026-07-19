@@ -21,6 +21,7 @@
     "elysia": "latest",
     "fleet-protocol": "workspace:*",
     "fleet-ship": "workspace:*",
+    "logestic": "^1.2.4",
     "yaml": "latest",
     "zod": "latest"
   },
