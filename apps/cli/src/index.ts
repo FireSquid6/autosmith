@@ -144,7 +144,7 @@ clientCommand
 clientCommand
   .command("serve")
   .description("Serve the client web ui")
-  .option("--url <bridgeUrl>", "URL of the bridge to proxy to", `http://localhost:${DEFAULT_PORT}`)
+  .option("--url <bridgeUrl>", "URL of the bridge to proxy to", `http://localhost:4800`)
   .action((options: { url: string }) => {
     startClientServer(normalizeUrl(options.url));
   })

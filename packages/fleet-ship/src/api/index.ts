@@ -12,12 +12,15 @@ import type { FleetShipConfig } from "fleet-protocol";
 import { workspacesPlugin } from "./workspaces";
 import { eventsPlugin } from "./events";
 import { systemResourcesPlugin } from "./system-resources";
+import { Logestic } from "logestic";
 
 export function createApp(manager: WorkspaceManager, _config: FleetShipConfig) {
   return new Elysia()
+    .use(Logestic.preset("commontz"))
     .use(workspacesPlugin(manager))
     .use(eventsPlugin(manager))
-    .use(systemResourcesPlugin());
+    .use(systemResourcesPlugin())
+
 }
 
 export type App = ReturnType<typeof createApp>;

@@ -13,9 +13,11 @@ import { workspacesPlugin } from "./workspaces";
 import { shipsPlugin } from "./ships";
 import { systemResourcesPlugin } from "./system-resources";
 import { reposPlugin } from "./repos";
+import { Logestic } from "logestic";
 
 export function createApp(manager: FleetManager, _config: BridgeConfig) {
   return new Elysia()
+    .use(Logestic.preset("commontz"))
     .use(workspacesPlugin(manager))
     .use(shipsPlugin(manager))
     .use(systemResourcesPlugin(manager))

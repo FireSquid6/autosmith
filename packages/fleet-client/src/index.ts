@@ -112,6 +112,6 @@ export function startClientServer(bridgeUrl: string) {
     },
   });
 
-  console.log(`Started client on ${server.url}`);
+  console.log(`Started client on ${server.url}, forwarding to ${bridgeUrl}`);
 }
 
