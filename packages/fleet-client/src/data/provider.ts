@@ -20,6 +20,14 @@ export interface FleetBridge {
   listShips(): Promise<Ship[]>;
   /** `GET /repos` — the bridge's registered repos. */
   listRepos(): Promise<Repo[]>;
+  /** `POST /repos` — register a new repo. */
+  createRepo(input: { name: string; url: string; provider?: string }): Promise<Repo>;
+  /** `DELETE /repos/:name` — remove a registered repo. */
+  deleteRepo(name: string): Promise<void>;
+  /** `POST /ships` — register a ship by URL; the bridge discovers its name. */
+  createShip(url: string): Promise<Ship>;
+  /** `DELETE /ships/:name` — deregister a ship. */
+  deleteShip(name: string): Promise<void>;
   /** `GET /workspaces` — every workspace across all ships. */
   listWorkspaces(): Promise<Workspace[]>;
   /** `GET /workspaces/:repo/:name` — detailed status (diff, ship, …). */

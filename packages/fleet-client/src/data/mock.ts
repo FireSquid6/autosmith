@@ -50,8 +50,23 @@ function mockDiff(name: string): WorkspaceDiff {
   return { added: 8 + (h % 40), removed: h % 15, commits: 1 + (h % 3) };
 }
 
+/** Seed the repo registry from the distinct repo names in the seed workspaces. */
+function seedRepos(): Repo[] {
+  const names: string[] = [];
+  for (const w of SEED_WORKSPACES) {
+    if (!names.includes(w.repoName)) names.push(w.repoName);
+  }
+  return names.map((name) => ({
+    name,
+    url: `git@github.com:orchestra/${name}.git`,
+    provider: "custom",
+  }));
+}
+
 export class MockFleetBridge implements FleetBridge {
   private readonly workspaces: Workspace[] = SEED_WORKSPACES.map((w) => ({ ...w }));
+  private readonly ships: Ship[] = SHIPS.map((s) => ({ ...s }));
+  private readonly repos: Repo[] = seedRepos();
 
   private find(repo: string, name: string): Workspace {
     const w = this.workspaces.find((x) => x.repoName === repo && x.name === name);
@@ -60,21 +75,50 @@ export class MockFleetBridge implements FleetBridge {
   }
 
   async listShips(): Promise<Ship[]> {
-    return SHIPS.map((s) => ({ ...s }));
+    return this.ships.map((s) => ({ ...s }));
   }
 
   async listRepos(): Promise<Repo[]> {
-    // The bridge owns a registry of repos; mirror it here by taking the distinct
-    // repo names seen across the seed workspaces, in first-seen order.
-    const names: string[] = [];
-    for (const w of this.workspaces) {
-      if (!names.includes(w.repoName)) names.push(w.repoName);
+    return this.repos.map((r) => ({ ...r }));
+  }
+
+  async createRepo(input: { name: string; url: string; provider?: string }): Promise<Repo> {
+    if (this.repos.some((r) => r.name === input.name)) {
+      throw new Error(`repo already exists: ${input.name}`);
     }
-    return names.map((name) => ({
-      name,
-      url: `git@github.com:orchestra/${name}.git`,
-      provider: "custom",
-    }));
+    const repo: Repo = { name: input.name, url: input.url, provider: input.provider ?? "custom" };
+    this.repos.push(repo);
+    return { ...repo };
+  }
+
+  async deleteRepo(name: string): Promise<void> {
+    const i = this.repos.findIndex((r) => r.name === name);
+    if (i === -1) throw new Error(`repo not found: ${name}`);
+    this.repos.splice(i, 1);
+  }
+
+  async createShip(url: string): Promise<Ship> {
+    // The real bridge learns the ship's name from its first sync; approximate
+    // that here by deriving a name from the URL host.
+    const name = ((): string => {
+      try {
+        return new URL(url).hostname || url;
+      } catch {
+        return url;
+      }
+    })();
+    if (this.ships.some((s) => s.name === name)) {
+      throw new Error(`ship already exists: ${name}`);
+    }
+    const ship: Ship = { name, spec: url, status: "online" };
+    this.ships.push(ship);
+    return { ...ship };
+  }
+
+  async deleteShip(name: string): Promise<void> {
+    const i = this.ships.findIndex((s) => s.name === name);
+    if (i === -1) throw new Error(`ship not found: ${name}`);
+    this.ships.splice(i, 1);
   }
 
   async listWorkspaces(): Promise<Workspace[]> {

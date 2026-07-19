@@ -9,6 +9,9 @@ function ActiveFill() {
   );
 }
 
+const navItemClass =
+  "relative flex w-full items-center gap-[9px] rounded-[3px] px-[10px] py-[9px] text-left font-mono transition-colors hover:bg-panel2";
+
 export function Sidebar() {
   const { repos, workspaces, liveCount } = useFleet();
 
@@ -20,16 +23,32 @@ export function Sidebar() {
       </div>
 
       <nav className="flex flex-1 flex-col gap-0.5 overflow-auto px-2 py-[11px]">
-        <NavLink
-          to="/"
-          end
-          className="relative flex w-full items-center gap-[9px] rounded-[3px] px-[10px] py-[9px] text-left font-mono transition-colors hover:bg-panel2"
-        >
+        <NavLink to="/" end className={navItemClass}>
           {({ isActive }) => (
             <>
               {isActive && <ActiveFill />}
               <span className="relative z-[1] text-[13px] text-text">⌂</span>
               <span className="relative z-[1] text-[12px] font-semibold tracking-[.06em] text-text">Bridge</span>
+            </>
+          )}
+        </NavLink>
+
+        <NavLink to="/repos" className={navItemClass}>
+          {({ isActive }) => (
+            <>
+              {isActive && <ActiveFill />}
+              <span className="relative z-[1] text-[13px] text-text">▣</span>
+              <span className="relative z-[1] text-[12px] font-semibold tracking-[.06em] text-text">Repos</span>
+            </>
+          )}
+        </NavLink>
+
+        <NavLink to="/ships" className={navItemClass}>
+          {({ isActive }) => (
+            <>
+              {isActive && <ActiveFill />}
+              <span className="relative z-[1] text-[13px] text-text">▦</span>
+              <span className="relative z-[1] text-[12px] font-semibold tracking-[.06em] text-text">Ships</span>
             </>
           )}
         </NavLink>

@@ -40,6 +40,33 @@ export class EdenFleetBridge implements FleetBridge {
     return data;
   }
 
+  async createRepo(input: { name: string; url: string; provider?: string }): Promise<Repo> {
+    const { data, error } = await this.client.repos.post(input);
+    if (error) throw edenError(error);
+    // The handler surfaces an in-band `{ error }` body on a mapped failure.
+    if (!data || "error" in data) throw edenError({ value: data });
+    return data;
+  }
+
+  async deleteRepo(name: string): Promise<void> {
+    const { error } = await this.client.repos({ name }).delete();
+    if (error) throw edenError(error);
+  }
+
+  async createShip(url: string): Promise<Ship> {
+    const { data, error } = await this.client.ships.post({ url });
+    if (error) throw edenError(error);
+    if (!data || "error" in data) throw edenError({ value: data });
+    // The bridge returns { name, url, status }; the ship's spec is only known
+    // once its system resources are fetched, so leave it blank until refresh.
+    return { name: data.name, spec: "", status: data.status };
+  }
+
+  async deleteShip(name: string): Promise<void> {
+    const { error } = await this.client.ships({ name }).delete();
+    if (error) throw edenError(error);
+  }
+
   async listWorkspaces(): Promise<Workspace[]> {
     const { data, error } = await this.client.workspaces.get();
     if (error) throw edenError(error);

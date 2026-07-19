@@ -14,6 +14,14 @@ interface FleetValue {
   activate: (repo: string, name: string) => Promise<void>;
   deactivate: (repo: string, name: string) => Promise<void>;
   getWorkspace: (repo: string, name: string) => Promise<WorkspaceDetail>;
+  /** Register a repo, then refresh the repo list. Rejects on failure. */
+  createRepo: (input: { name: string; url: string; provider?: string }) => Promise<void>;
+  /** Remove a repo, then refresh the repo list. Rejects on failure. */
+  deleteRepo: (name: string) => Promise<void>;
+  /** Register a ship by URL, then refresh the ship list. Rejects on failure. */
+  createShip: (url: string) => Promise<void>;
+  /** Deregister a ship, then refresh the ship list. Rejects on failure. */
+  deleteShip: (name: string) => Promise<void>;
 }
 
 const FleetContext = createContext<FleetValue | null>(null);
@@ -80,6 +88,43 @@ export function FleetProvider({ children }: { children: ReactNode }) {
 
   const getWorkspace = useCallback((repo: string, name: string) => bridge.getWorkspace(repo, name), []);
 
+  // Repo/ship mutations rethrow so the calling modal can show the failure inline,
+  // rather than swallowing it into the global banner like activate/deactivate.
+  const refreshRepos = useCallback(async () => setRepos(await bridge.listRepos()), []);
+  const refreshShips = useCallback(async () => setShips(await bridge.listShips()), []);
+
+  const createRepo = useCallback(
+    async (input: { name: string; url: string; provider?: string }) => {
+      await bridge.createRepo(input);
+      await refreshRepos();
+    },
+    [refreshRepos],
+  );
+
+  const deleteRepo = useCallback(
+    async (name: string) => {
+      await bridge.deleteRepo(name);
+      await refreshRepos();
+    },
+    [refreshRepos],
+  );
+
+  const createShip = useCallback(
+    async (url: string) => {
+      await bridge.createShip(url);
+      await refreshShips();
+    },
+    [refreshShips],
+  );
+
+  const deleteShip = useCallback(
+    async (name: string) => {
+      await bridge.deleteShip(name);
+      await refreshShips();
+    },
+    [refreshShips],
+  );
+
   const value: FleetValue = {
     ships,
     repos,
@@ -90,6 +135,10 @@ export function FleetProvider({ children }: { children: ReactNode }) {
     activate,
     deactivate,
     getWorkspace,
+    createRepo,
+    deleteRepo,
+    createShip,
+    deleteShip,
   };
 
   return <FleetContext.Provider value={value}>{children}</FleetContext.Provider>;
