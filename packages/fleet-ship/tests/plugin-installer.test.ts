@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { lstat, mkdir, mkdtemp, rm, stat, symlink } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, rm, stat, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { installFleetPlugin, inspectFleetPlugin } from "../src/plugin-installer";
@@ -101,14 +101,68 @@ describe("installFleetPlugin", () => {
     expect(await Bun.file(join(claudeRoot(homeDirectory), "hooks", "hooks.json")).text()).toContain(
       "SessionStart",
     );
-    expect(
-      await Bun.file(join(claudeRoot(homeDirectory), "hooks", "activate-fleet-skill.sh")).text(),
-    ).toContain("fleet-agent in-workspace");
-    expect(await Bun.file(openCodePlugin(homeDirectory)).text()).toContain("FleetAgentActivation");
-    expect(await Bun.file(copilotHook(homeDirectory)).json()).toMatchObject({ version: 1 });
+    const claudeHook = await Bun.file(
+      join(claudeRoot(homeDirectory), "hooks", "activate-fleet-skill.sh"),
+    ).text();
+    const openCodeHook = await Bun.file(openCodePlugin(homeDirectory)).text();
+    const copilotHookSource = await Bun.file(copilotHook(homeDirectory)).text();
+    expect(claudeHook).toContain("fleet agent in-workspace");
+    expect(openCodeHook).toContain("FleetAgentActivation");
+    expect(openCodeHook).toContain("fleet agent in-workspace");
+    expect(copilotHookSource).toContain("fleet agent in-workspace");
+    expect([claudeHook, openCodeHook, copilotHookSource].join("\n")).not.toContain("fleet-agent in-workspace");
+    expect(JSON.parse(copilotHookSource)).toMatchObject({ version: 1 });
     expect((await inspectFleetPlugin({ homeDirectory })).every(({ state }) => state === "current")).toBe(
       true,
     );
+  });
+
+  test("installed shell hooks invoke fleet agent in-workspace", async () => {
+    const { homeDirectory } = await fixture();
+    const binDirectory = join(homeDirectory, "bin");
+    await Promise.all([
+      mkdir(join(homeDirectory, ".claude")),
+      mkdir(join(homeDirectory, ".copilot")),
+      mkdir(binDirectory),
+    ]);
+    const fakeFleet = join(binDirectory, "fleet");
+    await Bun.write(
+      fakeFleet,
+      '#!/usr/bin/env bash\n[[ "$1" == "agent" && "$2" == "in-workspace" ]] || exit 64\nprintf "autosmith/worker-1\\n"\n',
+    );
+    await chmod(fakeFleet, 0o755);
+    await installFleetPlugin({ homeDirectory });
+
+    const env = { PATH: `${binDirectory}:${Bun.env.PATH ?? ""}` };
+    const claude = Bun.spawn([
+      join(claudeRoot(homeDirectory), "hooks", "activate-fleet-skill.sh"),
+    ], { env, stdout: "pipe", stderr: "pipe" });
+    const [claudeExit, claudeOutput, claudeError] = await Promise.all([
+      claude.exited,
+      new Response(claude.stdout).text(),
+      new Response(claude.stderr).text(),
+    ]);
+    expect(claudeExit).toBe(0);
+    expect(claudeError).toBe("");
+    expect(claudeOutput).toContain("You are running inside fleet workspace autosmith/worker-1.");
+
+    const copilotSource = await Bun.file(copilotHook(homeDirectory)).json();
+    const copilot = Bun.spawn(["bash", "-c", copilotSource.hooks.sessionStart[0].bash], {
+      env,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [copilotExit, copilotOutput, copilotError] = await Promise.all([
+      copilot.exited,
+      new Response(copilot.stdout).text(),
+      new Response(copilot.stderr).text(),
+    ]);
+    expect(copilotExit).toBe(0);
+    expect(copilotError).toBe("");
+    expect(JSON.parse(copilotOutput)).toEqual({
+      additionalContext:
+        "You are running inside fleet workspace autosmith/worker-1. Before doing any work, use the skill tool to activate the fleet-agent skill and follow its instructions for this session.",
+    });
   });
 
   test("installs only for the providers that are present", async () => {
