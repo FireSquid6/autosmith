@@ -123,6 +123,29 @@ describe("ship API", () => {
     expect(res.body).toMatchObject({ state: "building", model: "opus" });
   });
 
+  test("POST /agent/status updates state+description, rejects bad state (422), maps errors", async () => {
+    const ok = await makeApp()("POST", "/workspaces/r/n/agent/status", {
+      state: "building",
+      description: "writing the parser",
+    });
+    expect(ok.status).toBe(200);
+    expect(ok.body).toMatchObject({ state: "building", description: "writing the parser" });
+
+    // A state outside the allowed union → 422.
+    expect((await makeApp()("POST", "/workspaces/r/n/agent/status", { state: "napping", description: "z" })).status).toBe(
+      422,
+    );
+
+    const uninitialized = makeApp({
+      updateAgentStatus: async () => {
+        throw new WorkspaceError("agent not initialized: r/n", 400);
+      },
+    });
+    expect(
+      (await uninitialized("POST", "/workspaces/r/n/agent/status", { state: "idle", description: "d" })).status,
+    ).toBe(400);
+  });
+
   test("a non-WorkspaceError maps to 500", async () => {
     const call = makeApp({
       get: async () => {

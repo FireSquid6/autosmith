@@ -4,6 +4,7 @@
  */
 
 import { Elysia, t } from "elysia";
+import { AGENT_STATES } from "fleet-protocol";
 import { TerminalBridge } from "webterm";
 import type { ClientMsg, ServerMsg } from "webterm/protocol";
 import type { WorkspaceManager } from "../workspace-manager";
@@ -116,6 +117,24 @@ export function workspacesPlugin(manager: WorkspaceManager) {
         return mapped.body;
       }
     })
+    .post(
+      "/workspaces/:repo/:name/agent/status",
+      async ({ params, body, set }) => {
+        try {
+          return await manager.updateAgentStatus(params.repo, params.name, body);
+        } catch (err) {
+          const mapped = mapError(err);
+          set.status = mapped.status;
+          return mapped.body;
+        }
+      },
+      {
+        body: t.Object({
+          state: t.UnionEnum(AGENT_STATES),
+          description: t.String(),
+        }),
+      },
+    )
     .post("/workspaces/:repo/:name/activate", async ({ params, set }) => {
       try {
         await manager.activate(params.repo, params.name);

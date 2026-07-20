@@ -145,6 +145,32 @@ suite("WorkspaceManager end-to-end", () => {
     await manager.remove(summary.repoName, "ws-agent");
   });
 
+  test("updateAgentStatus changes state+description, keeping the session's model", async () => {
+    const summary = await manager.create({ url: sourceRepo, repoName: "repo", name: "ws-upd", branch: "main" });
+    await manager.activate(summary.repoName, "ws-upd");
+
+    // Cannot update before a session is initialized.
+    await expect(
+      manager.updateAgentStatus(summary.repoName, "ws-upd", { state: "building", description: "d" }),
+    ).rejects.toThrow(WorkspaceError);
+
+    await manager.initAgent(summary.repoName, "ws-upd", { model: "opus", provider: "anthropic", harness: "cc" });
+    const updated = await manager.updateAgentStatus(summary.repoName, "ws-upd", {
+      state: "building",
+      description: "writing the parser",
+    });
+    expect(updated).toMatchObject({
+      state: "building",
+      description: "writing the parser",
+      model: "opus",
+      provider: "anthropic",
+      harness: "cc",
+    });
+    expect(manager.agentStatus(summary.repoName, "ws-upd")).toMatchObject({ state: "building" });
+
+    await manager.remove(summary.repoName, "ws-upd");
+  });
+
   test("remove deactivates and deletes the workspace directory", async () => {
     const summary = await manager.create({ url: sourceRepo, repoName: "repo", name: "ws3", branch: "main" });
     await manager.activate(summary.repoName, "ws3");

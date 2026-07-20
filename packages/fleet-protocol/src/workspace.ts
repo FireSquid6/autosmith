@@ -59,14 +59,25 @@ export type WorkspaceStatus =
       readonly ship: string;
     };
 
+/** The lifecycle phases an agent reports as it works a task. */
+export const AGENT_STATES = ["idle", "planning", "building", "verifying", "awaiting"] as const;
+
+export type AgentState = (typeof AGENT_STATES)[number];
+
 /** Status of the coding agent attached to an active workspace's session. */
 export type AgentStatus = {
-  readonly state: "idle" | "planning" | "building" | "verifying" | "awaiting";
+  readonly state: AgentState;
   readonly description: string;
   readonly model: string;
   readonly provider: string;
   readonly harness: string;
 };
+
+/** Body of `POST /workspaces/:repo/:name/agent/status` — update the live status. */
+export interface UpdateAgentStatusRequest {
+  readonly state: AgentState;
+  readonly description: string;
+}
 
 /** Body of `POST /workspaces` — create a workspace by cloning `url` into `repoName`. */
 export interface CreateWorkspaceRequest {

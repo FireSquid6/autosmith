@@ -1,20 +1,28 @@
 #!/usr/bin/env bun
 /**
  * index.ts — `fleet-agent`, the CLI an agent invokes from inside a fleet
- * workspace to talk back to its ship.
+ * workspace to report back to its ship.
  *
  * The ship publishes an `atlas.json` at the root of its data directory
- * (`<fleetDirectory>/atlas.json`) with the local port it listens on. Since a
- * workspace lives at `<fleetDirectory>/<repo>/<name>`, these commands can walk
- * up from the current directory to find the ship and derive `(repo, name)`.
- *
- * All three commands are currently stubs — the wiring to the ship is TODO.
+ * (`<dataDir>/atlas.json`) with the local port it listens on. Since a workspace
+ * lives at `<dataDir>/<repo>/<name>`, `findWorkspace()` walks up from the current
+ * directory to find the ship and derive `(repo, name)`.
  */
 
 import { Command } from "commander";
+import { AGENT_STATES, type AgentState } from "fleet-protocol";
+import { findWorkspace, type WorkspaceLocation } from "./workspace";
+import { initAgent, updateStatus } from "./ship";
 
-/** The agent states the ship's `AgentStatus` accepts (see fleet-protocol). */
-const AGENT_STATES = ["idle", "planning", "building", "verifying", "awaiting"] as const;
+/** Resolve the current workspace or exit 1 with a clear message. */
+async function requireWorkspace(): Promise<WorkspaceLocation> {
+  const location = await findWorkspace();
+  if (location === null) {
+    console.error("fleet-agent: not inside a fleet workspace");
+    process.exit(1);
+  }
+  return location;
+}
 
 const agentCommand = new Command()
   .name("fleet-agent")
@@ -26,10 +34,10 @@ agentCommand
   .requiredOption("--model <model>", "model driving the agent, e.g. claude-opus-4-8")
   .requiredOption("--provider <provider>", "model provider, e.g. anthropic")
   .requiredOption("--harness <harness>", "agent harness, e.g. claude-code")
-  .action((_options: { model: string; provider: string; harness: string }) => {
-    // TODO: read atlas.json from the data dir, resolve (repo, name) from cwd,
-    // and POST /workspaces/:repo/:name/agent/init with { model, provider, harness }.
-    console.error("fleet-agent: init not yet implemented");
+  .action(async (options: { model: string; provider: string; harness: string }) => {
+    const location = await requireWorkspace();
+    const status = await initAgent(location, options);
+    console.log(`agent session started on ${location.repo}/${location.name} (${status.state})`);
   });
 
 agentCommand
@@ -37,19 +45,26 @@ agentCommand
   .description("update this workspace's agent status")
   .argument("<state>", `one of: ${AGENT_STATES.join(", ")}`)
   .requiredOption("-d, --description <text>", "short summary of what you're doing (100-200 characters)")
-  .action((_state: string, _options: { description: string }) => {
-    // TODO: validate <state> against AGENT_STATES, then push the new
-    // state + description to the ship for this workspace.
-    console.error("fleet-agent: status not yet implemented");
+  .action(async (state: string, options: { description: string }) => {
+    if (!(AGENT_STATES as readonly string[]).includes(state)) {
+      console.error(`fleet-agent: invalid state "${state}"; expected one of: ${AGENT_STATES.join(", ")}`);
+      process.exit(1);
+    }
+    const location = await requireWorkspace();
+    const status = await updateStatus(location, { state: state as AgentState, description: options.description });
+    console.log(`status updated to ${status.state} on ${location.repo}/${location.name}`);
   });
 
 agentCommand
   .command("in-workspace")
   .description("check whether the current directory is inside a fleet workspace")
-  .action(() => {
-    // TODO: walk up from cwd to find atlas.json; if found, print the derived
-    // `repo/name`, otherwise print "no workspace".
-    console.error("fleet-agent: in-workspace not yet implemented");
+  .action(async () => {
+    const location = await findWorkspace();
+    if (location === null) {
+      console.log("no workspace");
+      process.exit(1);
+    }
+    console.log(`${location.repo}/${location.name}`);
   });
 
 agentCommand.parse();

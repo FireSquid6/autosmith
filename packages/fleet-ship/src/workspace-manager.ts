@@ -189,6 +189,28 @@ export class WorkspaceManager {
     return this.agentStatuses.get(this.key(repoName, name)) ?? null;
   }
 
+  /**
+   * Update the live agent status (state + description), preserving the session's
+   * model/provider/harness. Requires a session started by `initAgent` first.
+   */
+  async updateAgentStatus(
+    repoName: string,
+    name: string,
+    update: { state: AgentStatus["state"]; description: string },
+  ): Promise<AgentStatus> {
+    if (!(await this.has(repoName, name))) {
+      throw new WorkspaceError(`workspace not found: ${repoName}/${name}`, 404);
+    }
+    const current = this.agentStatuses.get(this.key(repoName, name));
+    if (current === undefined) {
+      throw new WorkspaceError(`agent not initialized: ${repoName}/${name}`, 400);
+    }
+
+    const status: AgentStatus = { ...current, state: update.state, description: update.description };
+    this.agentStatuses.set(this.key(repoName, name), status);
+    return status;
+  }
+
   async create(options: CreateWorkspaceOptions): Promise<WorkspaceSummary> {
     const { url, repoName, name, branch } = options;
 

@@ -11,11 +11,13 @@ export {
   AtlasSchema,
   type Atlas,
 } from "./src/config";
-export { WorkspaceSummarySchema, type WorkspaceSummary } from "./src/workspace";
+export { WorkspaceSummarySchema, AGENT_STATES, type WorkspaceSummary } from "./src/workspace";
 export type {
   WorkspaceDiff,
   WorkspaceStatus,
   AgentStatus,
+  AgentState,
+  UpdateAgentStatusRequest,
   CreateWorkspaceRequest,
   SwitchBranchRequest,
 } from "./src/workspace";

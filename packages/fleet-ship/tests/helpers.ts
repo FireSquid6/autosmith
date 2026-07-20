@@ -25,6 +25,13 @@ export function stubManager(overrides: Record<string, unknown> = {}): WorkspaceM
       harness: b.harness,
     }),
     agentStatus: () => null,
+    updateAgentStatus: async (_r: string, _n: string, u: { state: string; description: string }) => ({
+      state: u.state,
+      description: u.description,
+      model: "opus",
+      provider: "anthropic",
+      harness: "cc",
+    }),
     activate: async () => {},
     deactivate: async () => {},
     remove: async () => {},
