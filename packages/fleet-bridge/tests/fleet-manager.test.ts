@@ -671,6 +671,19 @@ describe("FleetManager", () => {
     ]);
   });
 
+  test("concurrent addRepo calls atomically produce one success and one conflict", async () => {
+    const mgr = build(new Map());
+    const results = await Promise.allSettled([
+      mgr.addRepo({ name: "repo", url: "first" }),
+      mgr.addRepo({ name: "repo", url: "second" }),
+    ]);
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    const rejected = results.find((result) => result.status === "rejected") as PromiseRejectedResult;
+    expect(rejected.reason).toMatchObject({ status: 409 });
+    expect(await mgr.listRepos()).toHaveLength(1);
+  });
+
   test("removeRepo deletes a repo; unknown -> 404", async () => {
     const mgr = build(new Map());
     await mgr.addRepo({ name: "repo1", url: "git@fake/repo1.git" });
@@ -784,6 +797,27 @@ describe("FleetManager", () => {
     const rows = (await mgr.listWorkspaces()).filter((w) => w.repoName === "repo1" && w.name === "one");
     expect(rows).toHaveLength(1);
     expect(rows[0]?.ship).toBe("ship-a");
+  });
+
+  test("ownership re-election prefers an online confirmed ship before name order", async () => {
+    const ships = new Map<string, FakeShip>([
+      ["http://owner", { name: "owner", workspaces: [ws("repo1", "one")] }],
+      ["http://offline-a", { name: "offline-a", workspaces: [] }],
+      ["http://online-z", { name: "online-z", workspaces: [] }],
+    ]);
+    const mgr = await boot(ships);
+    const workspace = ws("repo1", "one");
+    ships.get("http://offline-a")!.workspaces.push(workspace);
+    ships.get("http://online-z")!.workspaces.push(workspace);
+    FakeSocket.byBase.get("http://offline-a")!.emit(evt("workspace.created", "offline-a", workspace));
+    FakeSocket.byBase.get("http://online-z")!.emit(evt("workspace.created", "online-z", workspace));
+
+    ships.delete("http://offline-a");
+    FakeSocket.byBase.get("http://offline-a")!.close();
+    ships.get("http://owner")!.throws = true;
+    FakeSocket.byBase.get("http://owner")!.emit(evt("workspace.removed", "owner", workspace));
+
+    expect((await mgr.listWorkspaces()).find((row) => row.name === "one")?.ship).toBe("online-z");
   });
 
   // --- verb happy paths + error/offline translation -------------------------

@@ -5,9 +5,15 @@ import {
   INVALID_MESSAGE_CLOSE_CODE,
   INVALID_MESSAGE_CLOSE_REASON,
 } from "webterm/protocol";
-import { handleServerFrame } from "../src/data/useWebterm";
+import { handleServerFrame, terminalPath } from "../src/data/useWebterm";
 
 describe("browser server-message handling", () => {
+  test("encodes each terminal identifier as one URL path segment", () => {
+    expect(terminalPath("repo ?#% 雪", "work ?#% λ")).toBe(
+      "/workspaces/repo%20%3F%23%25%20%E9%9B%AA/work%20%3F%23%25%20%CE%BB/terminal",
+    );
+  });
+
   test("dispatches valid grid and exit messages", () => {
     const grids: unknown[] = [];
     const exits: number[] = [];

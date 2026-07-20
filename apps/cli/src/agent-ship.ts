@@ -2,7 +2,7 @@ import type { AgentStatus } from "fleet-protocol";
 import type { WorkspaceLocation } from "./agent-workspace";
 
 async function post(location: WorkspaceLocation, path: string, body: unknown): Promise<AgentStatus> {
-  const url = `${location.baseUrl}/workspaces/${location.repo}/${location.name}/${path}`;
+  const url = `${location.baseUrl}/workspaces/${encodeURIComponent(location.repo)}/${encodeURIComponent(location.name)}/${path}`;
 
   let response: Response;
   try {

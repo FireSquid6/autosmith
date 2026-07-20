@@ -38,6 +38,10 @@ export function handleServerFrame(
   }
 }
 
+export function terminalPath(repo: string, name: string): string {
+  return `/workspaces/${encodeURIComponent(repo)}/${encodeURIComponent(name)}/terminal`;
+}
+
 interface UseWebtermResult {
   status: WebtermStatus;
   /** Write keystroke/paste bytes to the PTY. */
@@ -87,7 +91,7 @@ export function useWebterm(
     pendingSizeRef.current = null;
     setStatus("connecting");
 
-    const ws = new WebSocket(wsBridgeUrl(`/workspaces/${repo}/${name}/terminal`));
+    const ws = new WebSocket(wsBridgeUrl(terminalPath(repo, name)));
     wsRef.current = ws;
 
     ws.onopen = () => {

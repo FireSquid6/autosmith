@@ -34,7 +34,7 @@ import {
   type ShipInfo,
   type ShipSystemResources,
 } from "./types";
-import { Store } from "./store/store";
+import { RepoAlreadyExistsError, Store } from "./store/store";
 
 /** A typed error carrying the HTTP status the API layer should map it to. */
 export class BridgeError extends Error {
@@ -254,10 +254,18 @@ export class FleetManager {
   /** `POST /repos` — register a repo. `provider` defaults to `"custom"`. */
   async addRepo(input: CreateRepoInput): Promise<Repo> {
     const parsed = this.parseInput(CreateRepoInputSchema, input, "repo");
-    if (await this.store.getRepo(parsed.name)) {
-      throw new BridgeError(`repo already registered: ${parsed.name}`, 409);
+    try {
+      return await this.store.createRepo({
+        name: parsed.name,
+        url: parsed.url,
+        provider: parsed.provider ?? "custom",
+      });
+    } catch (error) {
+      if (error instanceof RepoAlreadyExistsError) {
+        throw new BridgeError(`repo already registered: ${parsed.name}`, 409);
+      }
+      throw error;
     }
-    return this.store.createRepo({ name: parsed.name, url: parsed.url, provider: parsed.provider ?? "custom" });
   }
 
   /** `DELETE /repos/:name`. */
@@ -434,7 +442,10 @@ export class FleetManager {
   /** Resolve the ws:// terminal endpoint on the ship that owns `(repo, name)`. */
   terminalTarget(repo: string, name: string): string {
     const conn = this.routeFor(repo, name);
-    return toWsUrl(conn.url, `/workspaces/${repo}/${name}/terminal`);
+    return toWsUrl(
+      conn.url,
+      `/workspaces/${encodeURIComponent(repo)}/${encodeURIComponent(name)}/terminal`,
+    );
   }
 
   // --- internals ------------------------------------------------------------
@@ -518,7 +529,10 @@ export class FleetManager {
     if (this.index.get(key) !== shipName) return;
     const successor = [...this.connections.values()]
       .filter((conn) => conn.name !== shipName && conn.workspaces.has(key))
-      .sort((a, b) => a.name.localeCompare(b.name))[0];
+      .sort(
+        (a, b) =>
+          Number(b.status === "online") - Number(a.status === "online") || a.name.localeCompare(b.name),
+      )[0];
     if (successor) this.index.set(key, successor.name);
     else this.index.delete(key);
   }

@@ -19,10 +19,11 @@ export function createApp(
   manager: WorkspaceManager,
   _config: FleetShipConfig,
   createTerminal?: (options: ConstructorParameters<typeof TerminalBridge>[0]) => Pick<TerminalBridge, "handle" | "stop">,
+  terminalInitTimeoutMs?: number,
 ) {
   return new Elysia({ websocket: { maxPayloadLength: MAX_CLIENT_FRAME_BYTES } })
     .use(Logestic.preset("commontz"))
-    .use(workspacesPlugin(manager, createTerminal))
+    .use(workspacesPlugin(manager, createTerminal, terminalInitTimeoutMs))
     .use(eventsPlugin(manager))
     .use(systemResourcesPlugin())
 

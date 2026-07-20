@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { agentCommand } from "../src/agent-command";
+import { initAgent, updateStatus } from "../src/agent-ship";
 
 const entrypoint = join(import.meta.dir, "..", "src", "index.ts");
 
@@ -21,6 +22,39 @@ async function runFleet(args: string[], cwd?: string) {
 }
 
 describe("fleet agent", () => {
+  test("encodes workspace identifiers in ship request path segments", async () => {
+    const paths: string[] = [];
+    const server = Bun.serve({
+      port: 0,
+      fetch(request) {
+        paths.push(new URL(request.url).pathname);
+        return Response.json({
+          state: "idle",
+          description: "",
+          model: "model",
+          provider: "provider",
+          harness: "harness",
+        });
+      },
+    });
+    const location = {
+      baseUrl: `http://localhost:${server.port}`,
+      repo: "repo ?#% 雪",
+      name: "work ?#% λ",
+    };
+
+    try {
+      await initAgent(location, { model: "model", provider: "provider", harness: "harness" });
+      await updateStatus(location, { state: "idle", description: "" });
+      expect(paths).toEqual([
+        "/workspaces/repo%20%3F%23%25%20%E9%9B%AA/work%20%3F%23%25%20%CE%BB/agent/init",
+        "/workspaces/repo%20%3F%23%25%20%E9%9B%AA/work%20%3F%23%25%20%CE%BB/agent/status",
+      ]);
+    } finally {
+      server.stop(true);
+    }
+  });
+
   test("identifies its audience and lists every agent operation", () => {
     const help = agentCommand.helpInformation();
 

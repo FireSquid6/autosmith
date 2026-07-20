@@ -14,13 +14,40 @@ import {
 import index from "./index.html";
 
 /** Per-connection state for a proxied `/bridge/*` WebSocket. */
-interface BridgeWsData {
+export interface BridgeWsData {
   upstream: WebSocket;
   /** Frames the browser sent before `upstream` reached OPEN (e.g. the terminal's first `init`). */
   buffer: string[];
   pendingBytes: number;
 }
-export function startClientServer(bridgeUrl: string, port?: number) {
+
+type CreateWebSocket = (url: string) => WebSocket;
+
+export function upgradeBridgeWebSocket(
+  req: Request,
+  server: Pick<Server<BridgeWsData>, "upgrade">,
+  target: string,
+  createWebSocket: CreateWebSocket = (url) => new WebSocket(url),
+): Response | undefined {
+  const upstream = createWebSocket(target);
+  const data: BridgeWsData = { upstream, buffer: [], pendingBytes: 0 };
+  if (server.upgrade(req, { data })) return undefined;
+
+  data.buffer.length = 0;
+  data.pendingBytes = 0;
+  upstream.onopen = null;
+  upstream.onmessage = null;
+  upstream.onclose = null;
+  upstream.onerror = null;
+  upstream.close();
+  return new Response("Upgrade failed", { status: 500 });
+}
+
+export function startClientServer(
+  bridgeUrl: string,
+  port?: number,
+  deps?: { createWebSocket?: CreateWebSocket },
+) {
   /**
    * Real bridge origin the `/bridge/*` proxy forwards to. Configure with the
    * `BRIDGE_URL` env var; defaults to a local bridge.
@@ -44,10 +71,7 @@ export function startClientServer(bridgeUrl: string, port?: number) {
     const path = bridgePath(url);
 
     if (req.headers.get("upgrade") === "websocket") {
-      const upstream = new WebSocket(bridgeWSUrl + path);
-      const data: BridgeWsData = { upstream, buffer: [], pendingBytes: 0 };
-      if (!server.upgrade(req, { data })) return new Response("Upgrade failed", { status: 500 });
-      return undefined;
+      return upgradeBridgeWebSocket(req, server, bridgeWSUrl + path, deps?.createWebSocket);
     }
 
     const target = bridgeUrl + path;

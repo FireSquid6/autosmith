@@ -8,6 +8,10 @@ import {
 } from "webterm/protocol";
 import type { ServerMsg } from "webterm/protocol";
 import { createApp } from "../src/api";
+import {
+  TERMINAL_INIT_TIMEOUT_CLOSE_CODE,
+  TERMINAL_INIT_TIMEOUT_CLOSE_REASON,
+} from "../src/api/workspaces";
 import { WORKSPACE_TMUX_NAMESPACE, workspaceSessionName } from "../src/workspace-session";
 import { stubConfig, stubManager } from "./helpers";
 
@@ -27,6 +31,7 @@ describe("ship terminal protocol", () => {
   let creates: number;
   let argvs: string[][];
   let sendOnCreate: ServerMsg | undefined;
+  let createTerminal: Parameters<typeof createApp>[2];
 
   beforeEach(() => {
     handled = [];
@@ -34,7 +39,7 @@ describe("ship terminal protocol", () => {
     creates = 0;
     argvs = [];
     sendOnCreate = undefined;
-    app = createApp(stubManager(), stubConfig, (options) => {
+    createTerminal = (options) => {
       creates++;
       argvs.push([...options.argv]);
       if (sendOnCreate) options.send(sendOnCreate);
@@ -42,7 +47,8 @@ describe("ship terminal protocol", () => {
         handle: (message) => handled.push(message),
         stop: () => stops++,
       };
-    });
+    };
+    app = createApp(stubManager(), stubConfig, createTerminal);
     app.listen(0);
     url = `ws://localhost:${app.server?.port}/workspaces/repo/name/terminal`;
   });
@@ -110,6 +116,33 @@ describe("ship terminal protocol", () => {
     const close = closed(socket);
     socket.close();
     await close;
+  });
+
+  test("times out a missing init and releases the workspace for reconnect", async () => {
+    app.server?.stop(true);
+    app = createApp(stubManager(), stubConfig, createTerminal, 20);
+    app.listen(0);
+    url = `ws://localhost:${app.server?.port}/workspaces/repo/name/terminal`;
+
+    const socket = new WebSocket(url);
+    const close = closed(socket);
+    await opened(socket);
+    expect(await close).toMatchObject({
+      code: TERMINAL_INIT_TIMEOUT_CLOSE_CODE,
+      reason: TERMINAL_INIT_TIMEOUT_CLOSE_REASON,
+    });
+    expect(stops).toBe(1);
+
+    const replacement = new WebSocket(url);
+    await opened(replacement);
+    replacement.send('{"type":"init","cols":80,"rows":24}');
+    await Bun.sleep(30);
+    expect(replacement.readyState).toBe(WebSocket.OPEN);
+    const replacementClose = closed(replacement);
+    replacement.close();
+    await replacementClose;
+    await Bun.sleep(10);
+    expect(stops).toBe(2);
   });
 
   for (const [name, frames] of [

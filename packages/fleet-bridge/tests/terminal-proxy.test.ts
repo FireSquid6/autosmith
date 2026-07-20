@@ -43,6 +43,7 @@ describe("bridge terminal proxy", () => {
   let bridgeUrl: string;
   let ships: Map<string, FakeShip>;
   let upstreamClosed: Promise<{ code: number; reason: string }>;
+  let upstreamPaths: string[];
 
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), "fleet-bridge-term-"));
@@ -52,9 +53,11 @@ describe("bridge terminal proxy", () => {
     // a WS echo on any path; "bye" closes the socket.
     let resolveUpstreamClose!: (value: { code: number; reason: string }) => void;
     upstreamClosed = new Promise((resolve) => (resolveUpstreamClose = resolve));
+    upstreamPaths = [];
     upstream = Bun.serve({
       port: 0,
       fetch(req, server) {
+        upstreamPaths.push(new URL(req.url).pathname);
         if (server.upgrade(req)) return undefined;
         return new Response("expected a websocket upgrade", { status: 400 });
       },
@@ -105,6 +108,31 @@ describe("bridge terminal proxy", () => {
     expect(await reply).toBe('echo:{"type":"init","cols":80,"rows":24}');
 
     client.close();
+  });
+
+  test("encodes terminal identifiers as exact upstream path segments", async () => {
+    const repo = "repo ?#% 雪";
+    const name = "work ?#% λ";
+    FakeSocket.byBase.get(`http://localhost:${upstream.port}`)?.emit({
+      type: "workspace.created",
+      ship: "ship-a",
+      at: "2026-01-01T00:00:00.000Z",
+      workspace: ws(repo, name),
+    });
+    const client = new WebSocket(
+      `${bridgeUrl}/workspaces/${encodeURIComponent(repo)}/${encodeURIComponent(name)}/terminal`,
+    );
+    await opened(client);
+    const reply = nextMessage(client);
+    client.send('{"type":"init","cols":80,"rows":24}');
+    await reply;
+
+    expect(upstreamPaths.at(-1)).toBe(
+      "/workspaces/repo%20%3F%23%25%20%E9%9B%AA/work%20%3F%23%25%20%CE%BB/terminal",
+    );
+    const close = closed(client);
+    client.close();
+    await close;
   });
 
   test("configures the Bun WebSocket payload limit through Elysia", () => {

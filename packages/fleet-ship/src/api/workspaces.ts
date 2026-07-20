@@ -22,6 +22,10 @@ import { mapError } from "./http";
 // tabs racing to attach the same tmux session through separate PTYs.
 const activeTerminals = new Map<string, true>();
 
+export const TERMINAL_INIT_TIMEOUT_MS = 5_000;
+export const TERMINAL_INIT_TIMEOUT_CLOSE_CODE = 1008;
+export const TERMINAL_INIT_TIMEOUT_CLOSE_REASON = "terminal init timeout";
+
 interface TerminalHandler {
   handle(message: ReturnType<typeof decodeClientMessage>): void;
   stop(): void;
@@ -32,6 +36,7 @@ interface TerminalConnectionData {
   sessionName?: string;
   initialized?: boolean;
   finished?: boolean;
+  initTimer?: ReturnType<typeof setTimeout>;
   finish?: (closeSocket: boolean, code?: number, reason?: string) => void;
 }
 
@@ -40,6 +45,7 @@ type CreateTerminal = (options: ConstructorParameters<typeof TerminalBridge>[0])
 export function workspacesPlugin(
   manager: WorkspaceManager,
   createTerminal: CreateTerminal = (options) => new TerminalBridge(options),
+  initTimeoutMs = TERMINAL_INIT_TIMEOUT_MS,
 ) {
   return new Elysia({ name: "ship-workspaces" })
     .get(
@@ -210,6 +216,8 @@ export function workspacesPlugin(
         data.finish = (closeSocket, code, reason) => {
           if (data.finished) return;
           data.finished = true;
+          clearTimeout(data.initTimer);
+          data.initTimer = undefined;
           const bridge = data.bridge;
           data.bridge = undefined;
           try {
@@ -219,6 +227,10 @@ export function workspacesPlugin(
           }
           if (closeSocket) ws.close(code, reason);
         };
+        data.initTimer = setTimeout(
+          () => data.finish?.(true, TERMINAL_INIT_TIMEOUT_CLOSE_CODE, TERMINAL_INIT_TIMEOUT_CLOSE_REASON),
+          initTimeoutMs,
+        );
 
         try {
           const bridge = createTerminal({
@@ -257,7 +269,11 @@ export function workspacesPlugin(
             reject(INVALID_MESSAGE_CLOSE_CODE, INVALID_MESSAGE_CLOSE_REASON);
             return;
           }
-          if (parsed.type === "init") data.initialized = true;
+          if (parsed.type === "init") {
+            data.initialized = true;
+            clearTimeout(data.initTimer);
+            data.initTimer = undefined;
+          }
           data.bridge.handle(parsed);
         } catch {
           reject(INVALID_MESSAGE_CLOSE_CODE, INVALID_MESSAGE_CLOSE_REASON);

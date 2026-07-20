@@ -6,7 +6,7 @@ import {
   INVALID_MESSAGE_CLOSE_CODE,
   INVALID_MESSAGE_CLOSE_REASON,
 } from "webterm/protocol";
-import { startClientServer } from "../src";
+import { startClientServer, upgradeBridgeWebSocket } from "../src";
 
 const opened = (socket: WebSocket) =>
   new Promise<void>((resolve, reject) => {
@@ -17,6 +17,30 @@ const closed = (socket: WebSocket) =>
   new Promise<CloseEvent>((resolve) => socket.addEventListener("close", (event) => resolve(event), { once: true }));
 
 describe("client terminal proxy", () => {
+  test("closes and detaches an upstream socket when the browser upgrade fails", () => {
+    let closed = 0;
+    const upstream = {
+      onopen: () => {},
+      onmessage: () => {},
+      onclose: () => {},
+      onerror: () => {},
+      close: () => closed++,
+    } as unknown as WebSocket;
+    const response = upgradeBridgeWebSocket(
+      new Request("http://client/bridge/workspaces/repo/name/terminal"),
+      { upgrade: () => false },
+      "ws://bridge/workspaces/repo/name/terminal",
+      () => upstream,
+    );
+
+    expect(response?.status).toBe(500);
+    expect(closed).toBe(1);
+    expect(upstream.onopen).toBeNull();
+    expect(upstream.onmessage).toBeNull();
+    expect(upstream.onclose).toBeNull();
+    expect(upstream.onerror).toBeNull();
+  });
+
   let upstream: Server<undefined>;
   let client: ReturnType<typeof startClientServer>;
   let url: string;
