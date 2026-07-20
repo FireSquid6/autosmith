@@ -53,7 +53,7 @@ export function Terminal({ repo, name, ship, branch, active, onActivate }: Termi
       </div>
 
       {active ? (
-        <TerminalGrid repo={repo} name={name} active={active} />
+        <TerminalGrid key={`${repo}/${name}`} repo={repo} name={name} active={active} />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-[15px] bg-term-bg p-10 text-center">
           <div className="font-mono text-[30px] leading-none text-[#3a424c]">◼</div>
