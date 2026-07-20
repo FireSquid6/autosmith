@@ -83,6 +83,46 @@ describe("ship API", () => {
     expect((await badActivate("POST", "/workspaces/r/n/activate")).status).toBe(400);
   });
 
+  test("POST /agent/init echoes an idle AgentStatus, validates body, maps errors", async () => {
+    const ok = await makeApp()("POST", "/workspaces/r/n/agent/init", {
+      model: "opus",
+      provider: "anthropic",
+      harness: "claude-code",
+    });
+    expect(ok.status).toBe(200);
+    expect(ok.body).toMatchObject({ state: "idle", model: "opus", provider: "anthropic", harness: "claude-code" });
+
+    // Missing body fields → 422 from Elysia's schema validation.
+    expect((await makeApp()("POST", "/workspaces/r/n/agent/init", { model: "opus" })).status).toBe(422);
+
+    const inactive = makeApp({
+      initAgent: async () => {
+        throw new WorkspaceError("workspace not active: r/n", 400);
+      },
+    });
+    expect(
+      (await inactive("POST", "/workspaces/r/n/agent/init", { model: "opus", provider: "anthropic", harness: "cc" }))
+        .status,
+    ).toBe(400);
+  });
+
+  test("GET /agent/status returns the current status (null by default)", async () => {
+    expect((await makeApp()("GET", "/workspaces/r/n/agent/status")).body).toBeUndefined();
+
+    const call = makeApp({
+      agentStatus: () => ({
+        state: "building",
+        description: "Created session at t",
+        model: "opus",
+        provider: "anthropic",
+        harness: "cc",
+      }),
+    });
+    const res = await call("GET", "/workspaces/r/n/agent/status");
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ state: "building", model: "opus" });
+  });
+
   test("a non-WorkspaceError maps to 500", async () => {
     const call = makeApp({
       get: async () => {

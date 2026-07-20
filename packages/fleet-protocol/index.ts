@@ -3,11 +3,19 @@
  * and the Fleet CLI. Pure types plus a couple of constants; no runtime deps.
  */
 
-export { DEFAULT_PORT, FleetShipConfigSchema, type FleetShipConfig } from "./src/config";
+export {
+  DEFAULT_PORT,
+  ATLAS_FILENAME,
+  FleetShipConfigSchema,
+  type FleetShipConfig,
+  AtlasSchema,
+  type Atlas,
+} from "./src/config";
 export { WorkspaceSummarySchema, type WorkspaceSummary } from "./src/workspace";
 export type {
   WorkspaceDiff,
   WorkspaceStatus,
+  AgentStatus,
   CreateWorkspaceRequest,
   SwitchBranchRequest,
 } from "./src/workspace";

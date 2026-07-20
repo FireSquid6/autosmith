@@ -1,5 +1,7 @@
 import { Command } from "commander";
 import { loadConfig } from "./config";
+import { writeAtlas } from "./atlas";
+import { installFleetSkill } from "./skill-installer";
 
 export const ship = new Command()
   .name("ship")
@@ -13,10 +15,14 @@ export const ship = new Command()
     const { createApp } = await import("./api");
 
     const config = await loadConfig(options.config);
+    await installFleetSkill();
     const manager = new WorkspaceManager(config);
     const app = createApp(manager, config);
     app.listen(config.port);
+
+    // Publish the discovery file so agents inside workspaces can reach us.
+    await writeAtlas(config.fleetDirectory, { port: app.server?.port ?? config.port });
+
     console.log(`fleet-ship "${config.name}" listening on http://localhost:${config.port}`);
   });
-
 

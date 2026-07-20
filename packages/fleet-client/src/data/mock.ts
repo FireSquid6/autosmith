@@ -152,11 +152,9 @@ export class MockFleetBridge implements FleetBridge {
       name: w.name,
       branch: w.branch,
       diff: mockDiff(w.name),
+      agent: null,
       issue: null,
       mergeRequest: null,
-      agentProvider: null,
-      agentProfile: null,
-      agentStatus: null,
       ship: w.ship,
     };
   }

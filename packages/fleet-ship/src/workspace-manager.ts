@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { Git } from "git-bun";
 import { Tmux } from "tmux-bun";
 import type {
+  AgentStatus,
   FleetEvent,
   FleetShipConfig,
   WorkspaceDiff,
@@ -45,10 +46,21 @@ export interface SwitchBranchOptions {
   readonly branch: string;
 }
 
+export interface InitAgentOptions {
+  readonly model: string;
+  readonly provider: string;
+  readonly harness: string;
+}
+
 export class WorkspaceManager {
   private readonly tmux: Tmux;
 
   private readonly listeners = new Set<(event: FleetEvent) => void>();
+
+  // Agent status is runtime state tied to a workspace's tmux session, so it
+  // lives in memory alongside it (not persisted) and is cleared when the
+  // session goes away — see deactivate()/remove().
+  private readonly agentStatuses = new Map<string, AgentStatus>();
 
   constructor(private readonly config: FleetShipConfig) {
     this.tmux = new Tmux({ namespace: TMUX_NAMESPACE });
@@ -76,6 +88,11 @@ export class WorkspaceManager {
   /** Common event fields: the emitting ship's name and an ISO timestamp. */
   private stamp(): { ship: string; at: string } {
     return { ship: this.config.name, at: new Date().toISOString() };
+  }
+
+  /** Map key for the `(repoName, name)` pair that identifies a workspace. */
+  private key(repoName: string, name: string): string {
+    return `${repoName}/${name}`;
   }
 
   /** Deterministic tmux session name for a `(repoName, name)` pair. */
@@ -137,13 +154,39 @@ export class WorkspaceManager {
       name,
       branch,
       diff,
+      agent: this.agentStatuses.get(this.key(repoName, name)) ?? null,
       issue: null,
       mergeRequest: null,
-      agentProvider: null,
-      agentProfile: null,
-      agentStatus: null,
       ship: this.config.name,
     };
+  }
+
+  /**
+   * Attach (or reset) the agent session on an active workspace, seeding its
+   * status to `idle`. Requires an up tmux session — the agent lives in it.
+   */
+  async initAgent(repoName: string, name: string, options: InitAgentOptions): Promise<AgentStatus> {
+    if (!(await this.has(repoName, name))) {
+      throw new WorkspaceError(`workspace not found: ${repoName}/${name}`, 404);
+    }
+    if (!(await this.tmux.hasSession(this.sessionName(repoName, name)))) {
+      throw new WorkspaceError(`workspace not active: ${repoName}/${name}`, 400);
+    }
+
+    const status: AgentStatus = {
+      state: "idle",
+      description: `Created session at ${new Date().toISOString()}`,
+      model: options.model,
+      provider: options.provider,
+      harness: options.harness,
+    };
+    this.agentStatuses.set(this.key(repoName, name), status);
+    return status;
+  }
+
+  /** Current agent status for a workspace, or `null` if none is attached. */
+  agentStatus(repoName: string, name: string): AgentStatus | null {
+    return this.agentStatuses.get(this.key(repoName, name)) ?? null;
   }
 
   async create(options: CreateWorkspaceOptions): Promise<WorkspaceSummary> {
@@ -198,6 +241,7 @@ export class WorkspaceManager {
       throw new WorkspaceError(`workspace not active: ${repoName}/${name}`, 400);
     }
     await this.tmux.session(sessionName).kill();
+    this.agentStatuses.delete(this.key(repoName, name));
 
     const workspace = await this.summarize(repoName, name);
     this.emit({ type: "workspace.deactivated", ...this.stamp(), workspace });
@@ -218,6 +262,7 @@ export class WorkspaceManager {
       await this.tmux.session(sessionName).kill();
     }
     await rm(this.workspaceDir(repoName, name), { recursive: true, force: true });
+    this.agentStatuses.delete(this.key(repoName, name));
 
     const workspace: WorkspaceSummary = { repoName, name, branch, active: false };
     this.emit({ type: "workspace.removed", ...this.stamp(), workspace });

@@ -112,6 +112,39 @@ suite("WorkspaceManager end-to-end", () => {
     await expect(manager.deactivate(summary.repoName, "ws2")).rejects.toThrow(WorkspaceError);
   });
 
+  test("initAgent seeds an idle status on an active workspace, surfaced by get", async () => {
+    const summary = await manager.create({ url: sourceRepo, repoName: "repo", name: "ws-agent", branch: "main" });
+
+    // Requires an active tmux session.
+    await expect(
+      manager.initAgent(summary.repoName, "ws-agent", { model: "opus", provider: "anthropic", harness: "cc" }),
+    ).rejects.toThrow(WorkspaceError);
+    expect(manager.agentStatus(summary.repoName, "ws-agent")).toBeNull();
+
+    await manager.activate(summary.repoName, "ws-agent");
+    const status = await manager.initAgent(summary.repoName, "ws-agent", {
+      model: "opus",
+      provider: "anthropic",
+      harness: "cc",
+    });
+    expect(status.state).toBe("idle");
+    expect(status.description).toStartWith("Created session at ");
+    expect(status).toMatchObject({ model: "opus", provider: "anthropic", harness: "cc" });
+
+    const detail = await manager.get(summary.repoName, "ws-agent");
+    expect(detail.state).toBe("active");
+    if (detail.state === "active") {
+      expect(detail.agent).toMatchObject({ state: "idle", model: "opus" });
+    }
+    expect(manager.agentStatus(summary.repoName, "ws-agent")).toMatchObject({ state: "idle" });
+
+    // Deactivating tears down the session, so the agent status is cleared.
+    await manager.deactivate(summary.repoName, "ws-agent");
+    expect(manager.agentStatus(summary.repoName, "ws-agent")).toBeNull();
+
+    await manager.remove(summary.repoName, "ws-agent");
+  });
+
   test("remove deactivates and deletes the workspace directory", async () => {
     const summary = await manager.create({ url: sourceRepo, repoName: "repo", name: "ws3", branch: "main" });
     await manager.activate(summary.repoName, "ws3");

@@ -51,15 +51,22 @@ export type WorkspaceStatus =
       readonly name: string;
       readonly branch: string;
       readonly diff: WorkspaceDiff;
+      readonly agent: AgentStatus | null;
       // The fields below are placeholders for later features; always null for now.
       readonly issue: null;
       readonly mergeRequest: null;
-      readonly agentProvider: null;
-      readonly agentProfile: null;
-      readonly agentStatus: null;
       /** Name of the ship (host) this workspace lives on, from the ship config. */
       readonly ship: string;
     };
+
+/** Status of the coding agent attached to an active workspace's session. */
+export type AgentStatus = {
+  readonly state: "idle" | "planning" | "building" | "verifying" | "awaiting";
+  readonly description: string;
+  readonly model: string;
+  readonly provider: string;
+  readonly harness: string;
+};
 
 /** Body of `POST /workspaces` — create a workspace by cloning `url` into `repoName`. */
 export interface CreateWorkspaceRequest {

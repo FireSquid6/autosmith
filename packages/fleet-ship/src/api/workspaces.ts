@@ -88,6 +88,34 @@ export function workspacesPlugin(manager: WorkspaceManager) {
         }),
       },
     )
+    .post(
+      "/workspaces/:repo/:name/agent/init",
+      async ({ params, body, set }) => {
+        try {
+          return await manager.initAgent(params.repo, params.name, body);
+        } catch (err) {
+          const mapped = mapError(err);
+          set.status = mapped.status;
+          return mapped.body;
+        }
+      },
+      {
+        body: t.Object({
+          model: t.String(),
+          provider: t.String(),
+          harness: t.String(),
+        }),
+      },
+    )
+    .get("/workspaces/:repo/:name/agent/status", async ({ params, set }) => {
+      try {
+        return manager.agentStatus(params.repo, params.name);
+      } catch (err) {
+        const mapped = mapError(err);
+        set.status = mapped.status;
+        return mapped.body;
+      }
+    })
     .post("/workspaces/:repo/:name/activate", async ({ params, set }) => {
       try {
         await manager.activate(params.repo, params.name);

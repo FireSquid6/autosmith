@@ -27,3 +27,19 @@ export type FleetShipConfig = z.infer<typeof FleetShipConfigSchema>;
  * Ships are free to configure any port; this is only the client-side default.
  */
 export const DEFAULT_PORT = 4700;
+
+/**
+ * Name of the discovery file the ship writes to the root of its `fleetDirectory`
+ * on startup. An agent inside a workspace (`<fleetDirectory>/<repo>/<name>`) can
+ * walk up to the data-directory root to find it and learn how to reach the ship.
+ */
+export const ATLAS_FILENAME = "atlas.json";
+
+/** Contents of `atlas.json` — how a workspace-local agent reaches its ship. */
+export const AtlasSchema = z.object({
+  /** Local port the ship's HTTP + WebSocket API is listening on. */
+  port: z.number().int(),
+});
+
+/** The parsed `atlas.json`, inferred from the schema. */
+export type Atlas = z.infer<typeof AtlasSchema>;
