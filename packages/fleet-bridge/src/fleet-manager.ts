@@ -41,6 +41,7 @@ export class BridgeError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    readonly ambiguousOutcome = false,
   ) {
     super(message);
     this.name = "BridgeError";
@@ -60,11 +61,18 @@ export interface CreateWorkspaceInput {
 
 type EdenResult<T> = { data: T | null; error: unknown };
 
+interface CreateReservation {
+  readonly shipName: string;
+  state: "pending" | "indeterminate";
+}
+
 export class FleetManager {
   /** Fleet members, keyed by discovered ship name. */
   private readonly connections = new Map<string, ShipConnection>();
   /** Fleet-wide ownership: `<repo>/<name>` → owning ship name. */
   private readonly index = new Map<string, string>();
+  /** In-flight and transport-ambiguous creates stay separate from confirmed routing ownership. */
+  private readonly createReservations = new Map<string, CreateReservation>();
   private readonly deps?: Partial<ShipConnectionDeps>;
   /** How long to wait for a ship's first `sync` (overridable in tests). */
   private readonly syncTimeoutMs: number;
@@ -161,7 +169,9 @@ export class FleetManager {
       throw new BridgeError(`ship already registered: ${name}`, 409);
     }
 
-    const conflicts = [...probe.workspaces.keys()].filter((key) => this.index.has(key));
+    const conflicts = [...probe.workspaces.keys()].filter(
+      (key) => this.index.has(key) || this.createReservations.has(key),
+    );
     if (conflicts.length > 0) {
       probe.close();
       throw new BridgeError(
@@ -187,7 +197,10 @@ export class FleetManager {
     conn.close();
     this.connections.delete(name);
     for (const [key, owner] of this.index) {
-      if (owner === name) this.index.delete(key);
+      if (owner === name) this.releaseOwnership(key, name);
+    }
+    for (const [key, reservation] of this.createReservations) {
+      if (reservation.shipName === name) this.createReservations.delete(key);
     }
     await this.persist();
   }
@@ -303,40 +316,87 @@ export class FleetManager {
     this.identifier(input.name, "workspace");
     const conn = this.connections.get(input.ship);
     if (!conn) throw new BridgeError(`unknown ship: ${input.ship}`, 400);
-    if (conn.status !== "online") throw new BridgeError(`ship "${input.ship}" is offline`, 503);
 
     const repo = await this.store.getRepo(input.repoName);
     if (!repo) throw new BridgeError(`unknown repo: ${input.repoName}`, 400);
+    if (this.connections.get(input.ship) !== conn) {
+      throw new BridgeError(`ship "${input.ship}" was removed while validating the create request`, 409);
+    }
+    if (conn.status !== "online") throw new BridgeError(`ship "${input.ship}" is offline`, 503);
 
     const key = workspaceKey(input.repoName, input.name);
     if (this.index.has(key)) {
       throw new BridgeError(`workspace already exists: ${key}`, 409);
     }
-
-    const response = await this.call<WorkspaceSummary>(conn, () =>
-      conn.client.workspaces.post({
-        url: repo.url,
-        repoName: input.repoName,
-        name: input.name,
-        branch: input.branch,
-      }) as Promise<EdenResult<WorkspaceSummary>>,
-    );
-    const parsedSummary = WorkspaceSummarySchema.safeParse(response);
-    if (!parsedSummary.success) {
-      throw new BridgeError(`ship "${conn.name}" returned an invalid workspace summary`, 502);
+    const existingReservation = this.createReservations.get(key);
+    if (existingReservation) {
+      const detail =
+        existingReservation.state === "indeterminate"
+          ? `workspace creation outcome is unknown: ${key} on ship "${existingReservation.shipName}"; ` +
+            `wait for confirmation or remove that ship to clear the reservation`
+          : `workspace creation already in progress: ${key} on ship "${existingReservation.shipName}"`;
+      throw new BridgeError(detail, 409);
     }
-    const summary = parsedSummary.data;
-    if (summary.repoName !== input.repoName || summary.name !== input.name) {
-      throw new BridgeError(`ship "${conn.name}" returned a workspace identity that was not requested`, 502);
+    const reservation: CreateReservation = { shipName: conn.name, state: "pending" };
+    this.createReservations.set(key, reservation);
+    let retainReservation = false;
+
+    try {
+      const response = await this.call<WorkspaceSummary>(conn, () =>
+        conn.client.workspaces.post({
+          url: repo.url,
+          repoName: input.repoName,
+          name: input.name,
+          branch: input.branch,
+        }) as Promise<EdenResult<WorkspaceSummary>>,
+        { ambiguousEmptyResponse: true },
+      );
+      const parsedSummary = WorkspaceSummarySchema.safeParse(response);
+      if (!parsedSummary.success) {
+        throw new BridgeError(`ship "${conn.name}" returned an invalid workspace summary`, 502, true);
+      }
+      const summary = parsedSummary.data;
+      if (summary.repoName !== input.repoName || summary.name !== input.name) {
+        throw new BridgeError(
+          `ship "${conn.name}" returned a workspace identity that was not requested`,
+          502,
+          true,
+        );
+      }
+      if (this.connections.get(conn.name) !== conn) {
+        throw new BridgeError(`ship "${conn.name}" was removed while creating ${key}`, 409);
+      }
+
+      // Optimistic insert so a GET right after create doesn't race the /events WS;
+      // the eventual `workspace.created` event overwrites with identical data.
+      conn.workspaces.set(key, summary);
+      this.claim(key, conn.name);
+
+      const confirmedOwner = this.index.get(key);
+      if (confirmedOwner !== conn.name) {
+        const owner = confirmedOwner ?? "another ship";
+        throw new BridgeError(
+          `workspace ${key} was confirmed on ship "${owner}" while creation targeted "${conn.name}"`,
+          409,
+        );
+      }
+
+      return { ...summary, ship: conn.name };
+    } catch (err) {
+      if (
+        err instanceof BridgeError &&
+        err.ambiguousOutcome &&
+        this.index.get(key) !== conn.name
+      ) {
+        reservation.state = "indeterminate";
+        retainReservation = true;
+      }
+      throw err;
+    } finally {
+      if (!retainReservation && this.createReservations.get(key) === reservation) {
+        this.createReservations.delete(key);
+      }
     }
-
-    // Optimistic insert so a GET right after create doesn't race the /events WS;
-    // the eventual `workspace.created` event overwrites with identical data.
-    const createdKey = workspaceKey(summary.repoName, summary.name);
-    conn.workspaces.set(createdKey, summary);
-    this.claim(createdKey, conn.name);
-
-    return { ...summary, ship: conn.name };
   }
 
   /** `POST /workspaces/:repo/:name/branch`. */
@@ -400,14 +460,15 @@ export class FleetManager {
       case "sync": {
         // Full replace of this ship's contribution: drop stale keys, (re)claim present.
         for (const [key, owner] of this.index) {
-          if (owner === shipName && !conn.workspaces.has(key)) this.index.delete(key);
+          if (owner === shipName && !conn.workspaces.has(key)) this.releaseOwnership(key, shipName);
         }
         for (const key of conn.workspaces.keys()) this.claim(key, shipName);
         break;
       }
       case "workspace.removed": {
         const key = workspaceKey(event.workspace.repoName, event.workspace.name);
-        if (this.index.get(key) === shipName) this.index.delete(key);
+        conn.workspaces.delete(key);
+        this.releaseOwnership(key, shipName);
         break;
       }
       default: {
@@ -425,7 +486,7 @@ export class FleetManager {
     for (const key of conn.workspaces.keys()) {
       if (keys.has(key)) continue;
       conn.workspaces.delete(key);
-      if (this.index.get(key) === conn.name) this.index.delete(key);
+      this.releaseOwnership(key, conn.name);
     }
     for (const workspace of workspaces) {
       const key = workspaceKey(workspace.repoName, workspace.name);
@@ -436,6 +497,8 @@ export class FleetManager {
 
   /** Claim ownership of a key for a ship — first-writer-wins on a runtime collision. */
   private claim(key: string, shipName: string): void {
+    const reservation = this.createReservations.get(key);
+
     const owner = this.index.get(key);
     if (owner === undefined) {
       this.index.set(key, shipName);
@@ -445,6 +508,19 @@ export class FleetManager {
           `already owned by "${owner}" — ignoring the newcomer`,
       );
     }
+
+    if (reservation?.state === "indeterminate" && reservation.shipName === shipName) {
+      this.createReservations.delete(key);
+    }
+  }
+
+  private releaseOwnership(key: string, shipName: string): void {
+    if (this.index.get(key) !== shipName) return;
+    const successor = [...this.connections.values()]
+      .filter((conn) => conn.name !== shipName && conn.workspaces.has(key))
+      .sort((a, b) => a.name.localeCompare(b.name))[0];
+    if (successor) this.index.set(key, successor.name);
+    else this.index.delete(key);
   }
 
   /** Keys hosted by more than one *online* ship (used for the startup fatal check). */
@@ -491,13 +567,25 @@ export class FleetManager {
    * Run an Eden call: unwrap `{data,error}`, map a ship-side error to a
    * `BridgeError`, and flip the ship offline on a network-level failure.
    */
-  private async call<T>(conn: ShipConnection, fn: () => Promise<EdenResult<T>>): Promise<T> {
-    let result: EdenResult<T>;
+  private async call<T>(
+    conn: ShipConnection,
+    fn: () => Promise<EdenResult<T>>,
+    opts?: { ambiguousEmptyResponse?: boolean },
+  ): Promise<T> {
+    let request: Promise<EdenResult<T>>;
     try {
-      result = await fn();
+      request = fn();
     } catch (err) {
       conn.markOffline();
       throw new BridgeError(`ship "${conn.name}" unreachable: ${(err as Error).message}`, 503);
+    }
+
+    let result: EdenResult<T>;
+    try {
+      result = await request;
+    } catch (err) {
+      conn.markOffline();
+      throw new BridgeError(`ship "${conn.name}" unreachable: ${(err as Error).message}`, 503, true);
     }
 
     if (result.error) {
@@ -514,7 +602,7 @@ export class FleetManager {
     }
 
     if (result.data === null) {
-      throw new BridgeError(`ship "${conn.name}" returned no data`, 502);
+      throw new BridgeError(`ship "${conn.name}" returned no data`, 502, opts?.ambiguousEmptyResponse);
     }
     return result.data;
   }
