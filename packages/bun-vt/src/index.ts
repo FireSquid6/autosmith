@@ -20,6 +20,7 @@ export {
   type CellStyle,
   type CellWidth,
   type Color,
+  type CursorShape,
   type CursorState,
   type TerminalOptions,
   type UnderlineStyle,

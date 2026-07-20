@@ -75,14 +75,45 @@ function drawGrid(
     }
   }
 
-  if (grid.cursor.visible && cursorOn) {
+  const cursorBlinking = grid.cursor.blinking ?? true;
+  if (grid.cursor.visible && (!cursorBlinking || cursorOn)) {
     const x = colEdge(grid.cursor.x);
     const y = rowEdge(grid.cursor.y);
-    ctx.globalAlpha = 0.7;
-    ctx.fillStyle = colors.cursor;
-    ctx.fillRect(x, y, colEdge(grid.cursor.x + 1) - x, rowEdge(grid.cursor.y + 1) - y);
-    ctx.globalAlpha = 1;
+    const w = colEdge(grid.cursor.x + 1) - x;
+    const h = rowEdge(grid.cursor.y + 1) - y;
+    const px = (size: number) => Math.max(1, Math.round(size * dpr)) / dpr;
+    ctx.fillStyle = resolveColor(grid.cursor.color, colors.cursor);
+
+    switch (grid.cursor.shape ?? "block") {
+      case "block": {
+        ctx.fillRect(x, y, w, h);
+        const cell = grid.cells[grid.cursor.y]?.[grid.cursor.x];
+        if (cell) {
+          const { bg } = cellColors(cell, colors);
+          paintCellGlyph(ctx, cell, x, y, w, h, bg, dpr);
+        }
+        break;
+      }
+      case "underline": {
+        const thickness = px(h / 10);
+        ctx.fillRect(x, y + h - thickness, w, thickness);
+        break;
+      }
+      case "bar": {
+        const thickness = px(w / 6);
+        ctx.fillRect(x, y, thickness, h);
+        break;
+      }
+    }
   }
+}
+
+function cellColors(cell: WireCellObject, colors: TermColors): { fg: string; bg: string } {
+  const inverse = ((cell.a ?? 0) & ATTR.inverse) !== 0;
+  let fg = resolveColor(cell.f, colors.fg);
+  let bg = resolveColor(cell.b, colors.bg);
+  if (inverse) [fg, bg] = [bg, fg];
+  return { fg, bg };
 }
 
 function paintCell(
@@ -95,16 +126,27 @@ function paintCell(
   colors: TermColors,
   dpr: number,
 ) {
-  const attrs = cell.a ?? 0;
-  const inverse = (attrs & ATTR.inverse) !== 0;
-  let fg = resolveColor(cell.f, colors.fg);
-  let bg = resolveColor(cell.b, colors.bg);
-  if (inverse) [fg, bg] = [bg, fg];
+  const { fg, bg } = cellColors(cell, colors);
 
   if (bg !== colors.bg) {
     ctx.fillStyle = bg;
     ctx.fillRect(x, y, cw, ch);
   }
+
+  paintCellGlyph(ctx, cell, x, y, cw, ch, fg, dpr);
+}
+
+function paintCellGlyph(
+  ctx: CanvasRenderingContext2D,
+  cell: WireCellObject,
+  x: number,
+  y: number,
+  cw: number,
+  ch: number,
+  fg: string,
+  dpr: number,
+) {
+  const attrs = cell.a ?? 0;
 
   if ((attrs & ATTR.invisible) !== 0 || !cell.t) {
     return;
@@ -180,6 +222,7 @@ export function TerminalGrid({ repo, name, active }: { repo: string; name: strin
   const { status, send, resize } = useWebterm(repo, name, active, {
     onGrid: (grid) => {
       latestGrid.current = grid;
+      cursorOn.current = true;
       scheduleDraw();
     },
     onExit: (code) => setExitCode(code),
@@ -191,6 +234,7 @@ export function TerminalGrid({ repo, name, active }: { repo: string; name: strin
       setExitCode(null);
       latestGrid.current = null;
       lastSize.current = null;
+      cursorOn.current = true;
     }
   }, [active, repo, name]);
 
@@ -242,6 +286,11 @@ export function TerminalGrid({ repo, name, active }: { repo: string; name: strin
   useEffect(() => {
     if (!active) return;
     const id = setInterval(() => {
+      const grid = latestGrid.current;
+      if (!grid?.cursor.visible || !(grid.cursor.blinking ?? true)) {
+        cursorOn.current = true;
+        return;
+      }
       cursorOn.current = !cursorOn.current;
       scheduleDraw();
     }, CURSOR_BLINK_MS);

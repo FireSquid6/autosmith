@@ -79,11 +79,19 @@ export function serializeGrid(term: Terminal): GridMsg {
   }
 
   const cursor = term.cursor();
+  const cursorColor = colorToWire(cursor.color);
   return {
     type: "grid",
     cols,
     rows,
-    cursor: { x: cursor.x, y: cursor.y, visible: cursor.visible },
+    cursor: {
+      x: cursor.x,
+      y: cursor.y,
+      visible: cursor.visible,
+      shape: cursor.shape,
+      blinking: cursor.blinking,
+      ...(cursorColor === undefined ? {} : { color: cursorColor }),
+    },
     cells,
   };
 }

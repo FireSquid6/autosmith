@@ -21,6 +21,7 @@ export {
   type GridMsg,
   type ExitMsg,
   type WireCursor,
+  type WireCursorShape,
   type WireCell,
   type WireCellObject,
   type WireColor,

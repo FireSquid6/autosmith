@@ -10,18 +10,23 @@
  */
 
 import { Parser, type CsiSequence, type EscSequence, type Handler } from "./parser";
-import { Screen } from "./screen";
+import { Screen, type CursorShape } from "./screen";
 import { applySgr } from "./sgr";
 import { Wide, type Cell } from "./cell";
+import { DEFAULT_COLOR, rgb, type Color } from "./color";
 
 export type { Cell, CellStyle, CellWidth, UnderlineStyle } from "./cell";
 export type { Color } from "./color";
+export type { CursorShape } from "./screen";
 
 export interface CursorState {
   readonly x: number;
   readonly y: number;
   readonly visible: boolean;
   readonly pendingWrap: boolean;
+  readonly shape: CursorShape;
+  readonly blinking: boolean;
+  readonly color: Color;
 }
 
 export interface TerminalOptions {
@@ -32,6 +37,19 @@ export interface TerminalOptions {
 }
 
 const encoder = new TextEncoder();
+
+function parseOscColor(value: string): Color | null {
+  const hex = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(value);
+  if (hex) return rgb(Number.parseInt(hex[1]!, 16), Number.parseInt(hex[2]!, 16), Number.parseInt(hex[3]!, 16));
+
+  const x11 = /^rgb:([\da-f]{1,4})\/([\da-f]{1,4})\/([\da-f]{1,4})$/i.exec(value);
+  if (!x11) return null;
+  const component = (digits: string): number => {
+    const max = 16 ** digits.length - 1;
+    return Math.round((Number.parseInt(digits, 16) * 255) / max);
+  };
+  return rgb(component(x11[1]!), component(x11[2]!), component(x11[3]!));
+}
 
 // C0 control bytes.
 const BEL = 0x07;
@@ -111,6 +129,9 @@ export class Terminal implements Handler {
       y: c.y,
       visible: this.#screen.cursorVisible,
       pendingWrap: c.pendingWrap,
+      shape: this.#screen.cursorShape,
+      blinking: this.#screen.cursorBlinking,
+      color: this.#screen.cursorColor,
     };
   }
 
@@ -210,6 +231,10 @@ export class Terminal implements Handler {
       return;
     }
     if (seq.prefix !== "") return; // '<', '=', '>' variants unsupported
+    if (seq.intermediates !== "") {
+      if (seq.intermediates === " " && seq.final === "q") this.#setCursorStyle(at(0));
+      return;
+    }
 
     switch (seq.final) {
       case "A":
@@ -294,11 +319,46 @@ export class Terminal implements Handler {
   }
 
   oscDispatch(data: string): void {
-    // OSC 0 (icon+title), 1 (icon), 2 (title): "N;text".
     const sep = data.indexOf(";");
-    if (sep < 0) return;
-    const code = data.slice(0, sep);
-    if (code === "0" || code === "2") this.title = data.slice(sep + 1);
+    const code = sep < 0 ? data : data.slice(0, sep);
+    if ((code === "0" || code === "2") && sep >= 0) {
+      this.title = data.slice(sep + 1);
+    } else if (code === "12" && sep >= 0) {
+      const color = parseOscColor(data.slice(sep + 1));
+      if (color) this.#screen.cursorColor = color;
+    } else if (code === "112") {
+      this.#screen.cursorColor = DEFAULT_COLOR;
+    }
+  }
+
+  #setCursorStyle(style: number): void {
+    switch (style) {
+      case 0:
+      case 1:
+        this.#screen.cursorShape = "block";
+        this.#screen.cursorBlinking = true;
+        break;
+      case 2:
+        this.#screen.cursorShape = "block";
+        this.#screen.cursorBlinking = false;
+        break;
+      case 3:
+        this.#screen.cursorShape = "underline";
+        this.#screen.cursorBlinking = true;
+        break;
+      case 4:
+        this.#screen.cursorShape = "underline";
+        this.#screen.cursorBlinking = false;
+        break;
+      case 5:
+        this.#screen.cursorShape = "bar";
+        this.#screen.cursorBlinking = true;
+        break;
+      case 6:
+        this.#screen.cursorShape = "bar";
+        this.#screen.cursorBlinking = false;
+        break;
+    }
   }
 
   // --- DEC private / ANSI modes ------------------------------------------

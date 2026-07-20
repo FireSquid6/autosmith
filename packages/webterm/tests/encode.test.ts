@@ -51,4 +51,30 @@ describe("encode", () => {
     expect(grid.cells[0]![1]).toEqual({ t: "i" });
     expect(grid.cells[0]![2]).toBe(0);
   });
+
+  test("serializeGrid includes cursor appearance", () => {
+    using term = new Terminal({ cols: 3, rows: 2 });
+    term.write("\x1b[6 q\x1b]12;#123456\x07");
+    expect(serializeGrid(term).cursor).toEqual({
+      x: 0,
+      y: 0,
+      visible: true,
+      shape: "bar",
+      blinking: false,
+      color: [0x12, 0x34, 0x56],
+    });
+  });
+
+  test("serializeGrid omits the default cursor color", () => {
+    using term = new Terminal({ cols: 3, rows: 2 });
+    const cursor = serializeGrid(term).cursor;
+    expect(cursor).toEqual({
+      x: 0,
+      y: 0,
+      visible: true,
+      shape: "block",
+      blinking: true,
+    });
+    expect("color" in cursor).toBe(false);
+  });
 });

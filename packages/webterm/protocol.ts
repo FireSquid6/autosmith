@@ -39,11 +39,16 @@ export type ClientMsg = InitMsg | InputMsg | ResizeMsg;
 // Server → client
 // ---------------------------------------------------------------------------
 
-/** Cursor position + visibility within the active screen. */
+export type WireCursorShape = "block" | "underline" | "bar";
+
+/** Cursor position and appearance within the active screen. */
 export interface WireCursor {
   readonly x: number;
   readonly y: number;
   readonly visible: boolean;
+  readonly shape?: WireCursorShape;
+  readonly blinking?: boolean;
+  readonly color?: WireColor;
 }
 
 /** A full active-screen snapshot to paint. `cells` is indexed `cells[row][col]`. */

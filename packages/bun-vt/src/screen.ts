@@ -18,6 +18,7 @@
  */
 
 import { Pen, Wide } from "./cell";
+import { DEFAULT_COLOR, type Color } from "./color";
 import { wcwidth } from "./wcwidth";
 
 type Row = Pen[];
@@ -30,6 +31,8 @@ export interface Cursor {
   /** Active graphic rendition template printed cells copy from. */
   pen: Pen;
 }
+
+export type CursorShape = "block" | "underline" | "bar";
 
 interface SavedCursor {
   x: number;
@@ -63,6 +66,9 @@ export class Screen {
 
   // DEC private modes.
   cursorVisible = true;
+  cursorShape: CursorShape = "block";
+  cursorBlinking = true;
+  cursorColor: Color = DEFAULT_COLOR;
   autowrap = true;
   originMode = false;
   onAlt = false;
@@ -524,6 +530,9 @@ export class Screen {
     this.scrollTop = 0;
     this.scrollBottom = this.rows - 1;
     this.cursorVisible = true;
+    this.cursorShape = "block";
+    this.cursorBlinking = true;
+    this.cursorColor = DEFAULT_COLOR;
     this.autowrap = true;
     this.originMode = false;
     this.tabStops = this.#defaultTabStops(this.cols);
