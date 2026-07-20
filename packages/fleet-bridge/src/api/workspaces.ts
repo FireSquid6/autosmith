@@ -14,11 +14,11 @@ export function workspacesPlugin(manager: FleetManager) {
   return new Elysia({ name: "bridge-workspaces" })
     .get(
       "/workspaces",
-      ({ query, set }) => {
+      async ({ query, set }) => {
         try {
           const filter =
             query.active === "true" ? "active" : query.active === "false" ? "inactive" : undefined;
-          return manager.listWorkspaces(filter);
+          return await manager.listWorkspaces(filter);
         } catch (err) {
           const mapped = mapError(err);
           set.status = mapped.status;

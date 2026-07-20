@@ -240,7 +240,20 @@ export class FleetManager {
   // --- workspace API (superset of the ship's) -------------------------------
 
   /** `GET /workspaces` — merged, deduped, annotated with the owning ship. */
-  listWorkspaces(filter?: "active" | "inactive"): BridgeWorkspaceSummary[] {
+  async listWorkspaces(filter?: "active" | "inactive"): Promise<BridgeWorkspaceSummary[]> {
+    const snapshots = await Promise.all(
+      [...this.connections.values()].map(async (conn) => {
+        if (conn.status !== "online") return;
+        const workspaces = await this.call<WorkspaceSummary[]>(conn, () =>
+          conn.client.workspaces.get() as Promise<EdenResult<WorkspaceSummary[]>>,
+        ).catch(() => undefined);
+        if (workspaces) return { conn, workspaces };
+      }),
+    );
+    for (const snapshot of snapshots) {
+      if (snapshot) this.applyWorkspaceSnapshot(snapshot.conn, snapshot.workspaces);
+    }
+
     const rows: BridgeWorkspaceSummary[] = [];
     for (const [key, shipName] of this.index) {
       const summary = this.connections.get(shipName)?.workspaces.get(key);
@@ -368,6 +381,20 @@ export class FleetManager {
         const key = workspaceKey(event.workspace.repoName, event.workspace.name);
         this.claim(key, shipName);
       }
+    }
+  }
+
+  private applyWorkspaceSnapshot(conn: ShipConnection, workspaces: WorkspaceSummary[]): void {
+    const keys = new Set(workspaces.map((workspace) => workspaceKey(workspace.repoName, workspace.name)));
+    for (const key of conn.workspaces.keys()) {
+      if (keys.has(key)) continue;
+      conn.workspaces.delete(key);
+      if (this.index.get(key) === conn.name) this.index.delete(key);
+    }
+    for (const workspace of workspaces) {
+      const key = workspaceKey(workspace.repoName, workspace.name);
+      conn.workspaces.set(key, workspace);
+      this.claim(key, conn.name);
     }
   }
 

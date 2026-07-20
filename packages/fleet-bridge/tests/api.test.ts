@@ -80,6 +80,14 @@ describe("bridge API", () => {
     expect((await call("GET", "/workspaces?active=false")).body).toHaveLength(1);
   });
 
+  test("GET /workspaces refreshes a branch changed without an event", async () => {
+    const ship = ships.get("http://ship-a")!;
+    ship.workspaces[0] = { ...ship.workspaces[0]!, branch: "feature" };
+
+    const result = await call("GET", "/workspaces");
+    expect(result.body.find((workspace: { name: string }) => workspace.name === "one")?.branch).toBe("feature");
+  });
+
   test("GET /workspaces/:repo/:name proxies (200) or 404s", async () => {
     const ok = await call("GET", "/workspaces/repo1/one");
     expect(ok.status).toBe(200);

@@ -63,14 +63,27 @@ describe("FleetManager", () => {
     const mgr = build(ships);
     await mgr.init();
 
-    const rows = mgr.listWorkspaces().sort((a, b) => a.repoName.localeCompare(b.repoName));
+    const rows = (await mgr.listWorkspaces()).sort((a, b) => a.repoName.localeCompare(b.repoName));
     expect(rows).toEqual([
       { repoName: "repo1", name: "one", branch: "main", active: true, ship: "ship-a" },
       { repoName: "repo2", name: "two", branch: "main", active: false, ship: "ship-b" },
     ]);
-    expect(mgr.listWorkspaces("active")).toHaveLength(1);
-    expect(mgr.listWorkspaces("inactive")).toHaveLength(1);
+    expect(await mgr.listWorkspaces("active")).toHaveLength(1);
+    expect(await mgr.listWorkspaces("inactive")).toHaveLength(1);
     expect(mgr.listShips().every((s) => s.status === "online")).toBe(true);
+  });
+
+  test("refreshes a branch changed on the ship without an event", async () => {
+    const ships = new Map<string, FakeShip>([
+      ["http://ship-a", { name: "ship-a", workspaces: [ws("repo1", "one")] }],
+    ]);
+    const mgr = await boot(ships);
+
+    expect((await mgr.listWorkspaces())[0]?.branch).toBe("main");
+    const ship = ships.get("http://ship-a")!;
+    ship.workspaces[0] = { ...ship.workspaces[0]!, branch: "feature" };
+
+    expect((await mgr.listWorkspaces())[0]?.branch).toBe("feature");
   });
 
   test("aborts startup when two reachable ships hold the same repo/name", async () => {
@@ -113,7 +126,7 @@ describe("FleetManager", () => {
 
     const info = await mgr.addShip("http://ship-b");
     expect(info).toMatchObject({ name: "ship-b", url: "http://ship-b", status: "online" });
-    expect(mgr.listWorkspaces().map((w) => w.ship).sort()).toEqual(["ship-a", "ship-b"]);
+    expect((await mgr.listWorkspaces()).map((w) => w.ship).sort()).toEqual(["ship-a", "ship-b"]);
 
     // Persisted to the roster store.
     const persisted = await store.getAllShips();
@@ -131,7 +144,7 @@ describe("FleetManager", () => {
     await mgr.removeShip("ship-a");
 
     expect(mgr.listShips()).toHaveLength(0);
-    expect(mgr.listWorkspaces()).toHaveLength(0);
+    expect(await mgr.listWorkspaces()).toHaveLength(0);
     await expect(mgr.removeShip("ship-a")).rejects.toMatchObject({ status: 404 });
   });
 
@@ -171,7 +184,7 @@ describe("FleetManager", () => {
     });
     expect(created).toEqual({ repoName: "repo2", name: "feature", branch: "dev", active: false, ship: "ship-a" });
     // Optimistically visible immediately.
-    expect(mgr.listWorkspaces().some((w) => w.repoName === "repo2" && w.name === "feature")).toBe(true);
+    expect((await mgr.listWorkspaces()).some((w) => w.repoName === "repo2" && w.name === "feature")).toBe(true);
   });
 
   test("getWorkspace proxies to the owning ship and annotates the ship", async () => {
@@ -274,7 +287,7 @@ describe("FleetManager", () => {
 
     expect(mgr.listShips()[0]?.status).toBe("offline");
     // Workspace still listed (last-known), but mutations/status return 503.
-    expect(mgr.listWorkspaces()).toHaveLength(1);
+    expect(await mgr.listWorkspaces()).toHaveLength(1);
     await expect(mgr.getWorkspace("repo1", "one")).rejects.toMatchObject({ status: 503 });
     await expect(mgr.activate("repo1", "one")).rejects.toMatchObject({ status: 503 });
 
@@ -296,16 +309,17 @@ describe("FleetManager", () => {
     ]);
     const mgr = await boot(ships);
     const socket = FakeSocket.byBase.get("http://ship-a")!;
+    ships.get("http://ship-a")!.throws = true;
 
     // created -> appears; branch_changed/activated -> upsert; removed -> gone.
     socket.emit(evt("workspace.created", "ship-a", ws("repo1", "two")));
-    expect(mgr.listWorkspaces().map((w) => w.name).sort()).toEqual(["one", "two"]);
+    expect((await mgr.listWorkspaces()).map((w) => w.name).sort()).toEqual(["one", "two"]);
 
     socket.emit(evt("workspace.activated", "ship-a", ws("repo1", "two", true)));
-    expect(mgr.listWorkspaces().find((w) => w.name === "two")?.active).toBe(true);
+    expect((await mgr.listWorkspaces()).find((w) => w.name === "two")?.active).toBe(true);
 
     socket.emit(evt("workspace.removed", "ship-a", ws("repo1", "one")));
-    expect(mgr.listWorkspaces().map((w) => w.name)).toEqual(["two"]);
+    expect((await mgr.listWorkspaces()).map((w) => w.name)).toEqual(["two"]);
   });
 
   test("a fresh sync fully replaces a ship's contribution (resync)", async () => {
@@ -314,6 +328,7 @@ describe("FleetManager", () => {
     ]);
     const mgr = await boot(ships);
     const socket = FakeSocket.byBase.get("http://ship-a")!;
+    ships.get("http://ship-a")!.throws = true;
 
     // Reconnect delivers a new snapshot: "one" is gone, "three" is new.
     socket.emit({
@@ -323,7 +338,7 @@ describe("FleetManager", () => {
       workspaces: [ws("repo1", "two"), ws("repo1", "three")],
     });
 
-    expect(mgr.listWorkspaces().map((w) => w.name).sort()).toEqual(["three", "two"]);
+    expect((await mgr.listWorkspaces()).map((w) => w.name).sort()).toEqual(["three", "two"]);
   });
 
   test("runtime duplicate collision keeps the first owner (first-writer-wins)", async () => {
@@ -332,11 +347,12 @@ describe("FleetManager", () => {
       ["http://ship-b", { name: "ship-b", workspaces: [] }],
     ]);
     const mgr = await boot(ships);
+    ships.get("http://ship-b")!.throws = true;
 
     // ship-b independently reports repo1/one — ship-a already owns it.
     FakeSocket.byBase.get("http://ship-b")!.emit(evt("workspace.created", "ship-b", ws("repo1", "one")));
 
-    const rows = mgr.listWorkspaces().filter((w) => w.repoName === "repo1" && w.name === "one");
+    const rows = (await mgr.listWorkspaces()).filter((w) => w.repoName === "repo1" && w.name === "one");
     expect(rows).toHaveLength(1);
     expect(rows[0]?.ship).toBe("ship-a");
   });
@@ -410,6 +426,6 @@ describe("FleetManager", () => {
     const byName = Object.fromEntries(mgr.listShips().map((s) => [s.name, s.status]));
     expect(byName["ship-a"]).toBe("online");
     expect(byName["ship-b"]).toBe("offline");
-    expect(mgr.listWorkspaces().map((w) => w.name)).toEqual(["one"]);
+    expect((await mgr.listWorkspaces()).map((w) => w.name)).toEqual(["one"]);
   });
 });

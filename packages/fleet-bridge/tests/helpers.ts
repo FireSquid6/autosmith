@@ -106,16 +106,56 @@ export function makeFakeClient(httpUrl: string, ships: Map<string, FakeShip>) {
     return { data: dataFactory(), error: null };
   };
 
-  const workspacesFn: any = (params: { repo: string }) => (params2: { name: string }) => ({
-    get: () => wrap(() => ({ state: "inactive", repoName: params.repo, name: params2.name, branch: "main" })),
-    branch: { post: () => wrap(() => ({ ok: true })) },
-    activate: { post: () => wrap(() => ({ ok: true })) },
-    deactivate: { post: () => wrap(() => ({ ok: true })) },
-    delete: () => wrap(() => ({ ok: true })),
-  });
+  const workspacesFn: any = (params: { repo: string }) => (params2: { name: string }) => {
+    const update = (patch: Partial<WorkspaceSummary>) => {
+      const workspace = ship()?.workspaces.find((w) => w.repoName === params.repo && w.name === params2.name);
+      if (workspace) Object.assign(workspace, patch);
+    };
+    return {
+      get: () =>
+        wrap(() => ({
+          state: "inactive",
+          repoName: params.repo,
+          name: params2.name,
+          branch:
+            ship()?.workspaces.find((w) => w.repoName === params.repo && w.name === params2.name)?.branch ?? "main",
+        })),
+      branch: {
+        post: (body: { branch: string }) =>
+          wrap(() => {
+            update({ branch: body.branch });
+            return { ok: true };
+          }),
+      },
+      activate: {
+        post: () =>
+          wrap(() => {
+            update({ active: true });
+            return { ok: true };
+          }),
+      },
+      deactivate: {
+        post: () =>
+          wrap(() => {
+            update({ active: false });
+            return { ok: true };
+          }),
+      },
+      delete: () =>
+        wrap(() => {
+          const s = ship();
+          if (s) s.workspaces = s.workspaces.filter((w) => w.repoName !== params.repo || w.name !== params2.name);
+          return { ok: true };
+        }),
+    };
+  };
   workspacesFn.get = () => wrap(() => [...(ship()?.workspaces ?? [])]);
   workspacesFn.post = (body: { url: string; repoName: string; name: string; branch: string }) =>
-    wrap(() => ({ repoName: body.repoName, name: body.name, branch: body.branch, active: false }));
+    wrap(() => {
+      const workspace = { repoName: body.repoName, name: body.name, branch: body.branch, active: false };
+      ship()?.workspaces.push(workspace);
+      return workspace;
+    });
 
   return {
     workspaces: workspacesFn,
