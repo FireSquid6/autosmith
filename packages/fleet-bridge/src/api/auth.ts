@@ -17,6 +17,8 @@ export interface AuthPluginOptions {
   sessionTtlMs: number;
   /** Whether to mark the cookie `Secure` (production/TLS only). */
   secure: boolean;
+  /** Whether the bridge enforces auth — surfaced to the frontend via `/auth/config`. */
+  authRequired: boolean;
 }
 
 const credentials = t.Object({ username: t.String(), password: t.String() });
@@ -25,6 +27,7 @@ export function authPlugin(auth: AuthService, options: AuthPluginOptions) {
   const maxAgeSeconds = options.sessionTtlMs / 1000;
 
   return new Elysia({ name: "bridge-auth" })
+    .get("/auth/config", () => ({ authRequired: options.authRequired }))
     .post(
       "/auth/login",
       async ({ body, set }) => {

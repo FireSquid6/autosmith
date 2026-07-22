@@ -30,6 +30,11 @@ export const BridgeConfigSchema = z.object({
    * `loadConfig` fills it from the env when the file omits it.
    */
   serviceToken: z.string().min(1).optional(),
+  /**
+   * Whether to enforce authentication on the non-`/auth` API. Optional; treated as
+   * `true` (secure by default) when omitted. Set `false` only for a trusted network.
+   */
+  requireAuth: z.boolean().optional(),
 });
 
 /** The parsed `fleet-bridge-config.yaml`, inferred from the schema. */

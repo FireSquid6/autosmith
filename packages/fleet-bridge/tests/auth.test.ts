@@ -23,7 +23,7 @@ function cookieToken(res: Response): string | undefined {
 }
 
 function makeAuthApp(auth: AuthService) {
-  return new Elysia().use(authPlugin(auth, { sessionTtlMs: 60_000, secure: false }));
+  return new Elysia().use(authPlugin(auth, { sessionTtlMs: 60_000, secure: false, authRequired: true }));
 }
 
 describe("auth routes", () => {

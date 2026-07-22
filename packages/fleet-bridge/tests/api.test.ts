@@ -22,17 +22,23 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
   return { promise, resolve };
 }
 
+const TEST_SERVICE_TOKEN = "test-service-token";
+
 describe("bridge API", () => {
   let dir: string;
   let manager: FleetManager;
   let app: ReturnType<typeof createApp>;
   let ships: Map<string, FakeShip>;
 
+  // The bridge enforces auth by default; the CLI/machine principal is the service
+  // token, so every request here carries it as a Bearer.
+  const AUTH = { authorization: `Bearer ${TEST_SERVICE_TOKEN}` };
+
   async function call(method: string, path: string, body?: unknown) {
     const res = await app.handle(
       new Request(`http://bridge${path}`, {
         method,
-        headers: body === undefined ? undefined : { "content-type": "application/json" },
+        headers: body === undefined ? AUTH : { ...AUTH, "content-type": "application/json" },
         body: body === undefined ? undefined : JSON.stringify(body),
       }),
     );
@@ -42,7 +48,7 @@ describe("bridge API", () => {
 
   /** Read the raw response text — for the text/plain diff route. */
   async function callText(path: string) {
-    const res = await app.handle(new Request(`http://bridge${path}`));
+    const res = await app.handle(new Request(`http://bridge${path}`, { headers: AUTH }));
     return { status: res.status, text: await res.text() };
   }
 
@@ -54,7 +60,7 @@ describe("bridge API", () => {
       ["http://ship-b", { name: "ship-b", workspaces: [ws("repo2", "two")] }],
       ["http://ship-c", { name: "ship-c", workspaces: [] }], // reachable, not yet added
     ]);
-    const config = { dataDirectory: dir, port: 4800, name: "bridge" };
+    const config = { dataDirectory: dir, port: 4800, name: "bridge", serviceToken: TEST_SERVICE_TOKEN };
     const store = new Store(dir);
     await store.load();
     await store.createShip({ name: "ship-a", url: "http://ship-a" });

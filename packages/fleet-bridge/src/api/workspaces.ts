@@ -19,9 +19,20 @@ import {
 } from "webterm/protocol";
 import type { ServerMsg } from "webterm/protocol";
 import type { FleetManager } from "../fleet-manager";
+import type { AuthService } from "../auth-service";
 import { mapError } from "./http";
 
-export function workspacesPlugin(manager: FleetManager, serviceToken?: string) {
+export interface WorkspacesPluginOptions {
+  /** Presented to the owning ship when opening the upstream terminal socket. */
+  serviceToken?: string;
+  /** Used to validate the one-time `?ticket=` on the browser-facing terminal WS. */
+  auth?: AuthService;
+  /** When true, the terminal WS requires a valid ticket. */
+  requireAuth?: boolean;
+}
+
+export function workspacesPlugin(manager: FleetManager, options: WorkspacesPluginOptions = {}) {
+  const { serviceToken, auth, requireAuth } = options;
   const upstreamHeaders = serviceToken ? { authorization: `Bearer ${serviceToken}` } : undefined;
   return new Elysia({ name: "bridge-workspaces" })
     .get(
@@ -143,8 +154,17 @@ export function workspacesPlugin(manager: FleetManager, serviceToken?: string) {
       }
     })
     .ws("/workspaces/:repo/:name/terminal", {
+      query: t.Object({ ticket: t.Optional(t.String()) }),
       open(ws) {
         const { repo, name } = ws.data.params;
+
+        // Browsers can't set headers on a WebSocket, so the terminal stream is
+        // authenticated by a single-use ticket minted via GET /auth/ws-ticket.
+        if (requireAuth && !auth?.consumeTicket(ws.data.query?.ticket)) {
+          ws.send(JSON.stringify({ type: "exit", code: 1 } satisfies ServerMsg));
+          ws.close();
+          return;
+        }
 
         let target: string;
         try {

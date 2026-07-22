@@ -79,7 +79,7 @@ describe("bridge terminal proxy", () => {
       [`http://localhost:${upstream.port}`, { name: "ship-a", workspaces: [ws("repo1", "w1")] }],
     ]);
 
-    const config = { dataDirectory: dir, port: 4800, name: "bridge" };
+    const config = { dataDirectory: dir, port: 4800, name: "bridge", requireAuth: false };
     const store = new Store(dir);
     await store.load();
     await store.createShip({ name: "ship-a", url: `http://localhost:${upstream.port}` });
