@@ -4,11 +4,17 @@ import type { WorkspaceLocation } from "./agent-workspace";
 async function post(location: WorkspaceLocation, path: string, body: unknown): Promise<AgentStatus> {
   const url = `${location.baseUrl}/workspaces/${encodeURIComponent(location.repo)}/${encodeURIComponent(location.name)}/${path}`;
 
+  // Env override wins, then the token the ship published in atlas.json.
+  const token = process.env.FLEET_TOKEN ?? process.env.FLEET_SERVICE_TOKEN ?? location.serviceToken;
+
   let response: Response;
   try {
     response = await fetch(url, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify(body),
     });
   } catch (error) {

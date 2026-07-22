@@ -47,6 +47,12 @@ export const ATLAS_FILENAME = "atlas.json";
 export const AtlasSchema = z.object({
   /** Local port the ship's HTTP + WebSocket API is listening on. */
   port: z.number().int(),
+  /**
+   * The ship's service token, so a workspace-local agent can authenticate without
+   * separate env setup. Present only when the ship is configured with one; the
+   * file is written owner-readable (`0o600`).
+   */
+  serviceToken: z.string().min(1).optional(),
 });
 
 /** The parsed `atlas.json`, inferred from the schema. */

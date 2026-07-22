@@ -13,12 +13,16 @@ export interface WorkspaceLocation {
   readonly repo: string;
   readonly name: string;
   readonly baseUrl: string;
+  /** The ship's service token, if it published one — used to authenticate agent calls. */
+  readonly serviceToken?: string;
 }
 
-async function readAtlasPort(dir: string): Promise<number | null> {
+type AtlasInfo = { port: number; serviceToken?: string };
+
+async function readAtlas(dir: string): Promise<AtlasInfo | null> {
   try {
     const parsed = AtlasSchema.safeParse(await Bun.file(join(dir, "atlas.json")).json());
-    return parsed.success ? parsed.data.port : null;
+    return parsed.success ? { port: parsed.data.port, serviceToken: parsed.data.serviceToken } : null;
   } catch {
     return null;
   }
@@ -29,14 +33,19 @@ export async function findWorkspace(startDir: string = process.cwd()): Promise<W
 
   let dir = start;
   while (true) {
-    const port = await readAtlasPort(dir);
-    if (port !== null) {
+    const atlas = await readAtlas(dir);
+    if (atlas !== null) {
       const segments = relative(dir, start).split(sep).filter((segment) => segment.length > 0);
       if (segments.length < 2) return null;
       const repo = FleetIdentifierSchema.safeParse(segments[0]);
       const name = FleetIdentifierSchema.safeParse(segments[1]);
       if (!repo.success || !name.success) return null;
-      return { repo: repo.data, name: name.data, baseUrl: `http://localhost:${port}` };
+      return {
+        repo: repo.data,
+        name: name.data,
+        baseUrl: `http://localhost:${atlas.port}`,
+        serviceToken: atlas.serviceToken,
+      };
     }
 
     const parent = dirname(dir);

@@ -9,9 +9,17 @@ import type { App } from "fleet-ship/api";
 
 export type FleetClient = ReturnType<typeof treaty<App>>;
 
-/** Build an Eden Treaty client pointed at `url` (already normalized). */
-export function makeClient(url: string): FleetClient {
-  return treaty<App>(url);
+/**
+ * Build an Eden Treaty client pointed at `url` (already normalized).
+ *
+ * Presents the service token as a Bearer header so authenticated ships/bridges
+ * accept the CLI as a machine principal. The token is taken from `token`, else
+ * `FLEET_TOKEN`, else `FLEET_SERVICE_TOKEN`; when none is set the client is
+ * unauthenticated (fine against a ship/bridge running open).
+ */
+export function makeClient(url: string, token?: string): FleetClient {
+  const resolved = token ?? process.env.FLEET_TOKEN ?? process.env.FLEET_SERVICE_TOKEN;
+  return treaty<App>(url, resolved ? { headers: { authorization: `Bearer ${resolved}` } } : undefined);
 }
 
 /**

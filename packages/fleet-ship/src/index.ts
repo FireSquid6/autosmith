@@ -98,8 +98,12 @@ export const ship = new Command()
     const app = createApp(manager, config);
     app.listen(config.port);
 
-    // Publish the discovery file so agents inside workspaces can reach us.
-    await writeAtlas(config.fleetDirectory, { port: app.server?.port ?? config.port });
+    // Publish the discovery file so agents inside workspaces can reach us
+    // (carrying the service token so those agents can authenticate).
+    await writeAtlas(config.fleetDirectory, {
+      port: app.server?.port ?? config.port,
+      serviceToken: config.serviceToken,
+    });
 
     console.log(`fleet-ship "${config.name}" listening on http://localhost:${config.port}`);
   });
