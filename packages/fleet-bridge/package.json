@@ -5,7 +5,8 @@
   "private": true,
   "exports": {
     ".": "./src/index.ts",
-    "./api": "./src/api/index.ts"
+    "./api": "./src/api/index.ts",
+    "./types": "./src/types.ts"
   },
   "bin": {
     "fleet-bridge": "src/index.ts"

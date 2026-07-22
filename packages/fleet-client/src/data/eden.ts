@@ -189,4 +189,14 @@ export class EdenFleetBridge implements FleetBridge {
     const { error } = await this.client.workspaces({ repo })({ name }).deactivate.post();
     if (error) throw edenError(error);
   }
+
+  async switchBranch(repo: string, name: string, branch: string): Promise<void> {
+    const { error } = await this.client.workspaces({ repo })({ name }).branch.post({ branch });
+    if (error) throw edenError(error);
+  }
+
+  async deleteWorkspace(repo: string, name: string): Promise<void> {
+    const { error } = await this.client.workspaces({ repo })({ name }).delete();
+    if (error) throw edenError(error);
+  }
 }

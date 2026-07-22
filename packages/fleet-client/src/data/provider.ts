@@ -42,4 +42,8 @@ export interface FleetBridge {
   activateWorkspace(repo: string, name: string): Promise<void>;
   /** `POST /workspaces/:repo/:name/deactivate` — kill the session. */
   deactivateWorkspace(repo: string, name: string): Promise<void>;
+  /** `POST /workspaces/:repo/:name/branch` — switch the workspace's git branch. */
+  switchBranch(repo: string, name: string, branch: string): Promise<void>;
+  /** `DELETE /workspaces/:repo/:name` — remove a workspace. */
+  deleteWorkspace(repo: string, name: string): Promise<void>;
 }

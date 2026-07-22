@@ -1,12 +1,18 @@
-import { Link, useParams } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useFleet } from "@/data/FleetContext";
 import { WorkspacePanel } from "@/components/WorkspacePanel";
+import { SwitchBranchModal } from "@/components/SwitchBranchModal";
+import { ConfirmDeleteModal } from "@/routes/ReposRoute";
 import { agentStateColor } from "@/lib/agent-status";
 
 export function WorkspaceRoute() {
   const { repo = "", name = "" } = useParams();
-  const { workspaces, activate, deactivate } = useFleet();
+  const navigate = useNavigate();
+  const { workspaces, activate, deactivate, deleteWorkspace } = useFleet();
+  const [switchingBranch, setSwitchingBranch] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(false);
   const ws = workspaces.find((w) => w.repoName === repo && w.name === name);
 
   if (!ws) {
@@ -43,7 +49,7 @@ export function WorkspaceRoute() {
           <span className="font-mono text-[10.5px] text-dim2">provider {agent?.provider ?? "—"}</span>
           <span className="font-mono text-[10.5px] text-dim2">harness {agent?.harness ?? "—"}</span>
         </div>
-        <div className="flex items-center gap-[10px]">
+        <div className="flex flex-wrap items-center justify-end gap-[10px]">
           <span className="flex items-center gap-[7px] rounded-[4px] border border-line px-[11px] py-[5px] font-mono text-[10px] font-semibold tracking-[.11em] text-dim">
             <span className={cn("h-[7px] w-[7px] rounded-full", active ? "bg-accent" : "bg-dim2")} />
             {active ? "ACTIVE" : "INACTIVE"}
@@ -65,6 +71,20 @@ export function WorkspaceRoute() {
               ▸ Activate
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => setSwitchingBranch(true)}
+            className="rounded-[4px] border border-line px-[13px] py-[6px] font-mono text-[11px] font-semibold text-text transition-[filter] hover:brightness-[1.18]"
+          >
+            ⎇ Switch Branch
+          </button>
+          <button
+            type="button"
+            onClick={() => setPendingDelete(true)}
+            className="rounded-[4px] border border-line px-[13px] py-[6px] font-mono text-[11px] font-semibold text-red-400/80 transition-[filter] hover:text-red-400 hover:brightness-[1.18]"
+          >
+            ✕ Delete
+          </button>
         </div>
       </div>
 
@@ -97,6 +117,26 @@ export function WorkspaceRoute() {
         active={active}
         onActivate={() => activate(repo, name)}
       />
+
+      {switchingBranch && (
+        <SwitchBranchModal
+          repo={repo}
+          name={name}
+          currentBranch={ws.branch}
+          onClose={() => setSwitchingBranch(false)}
+        />
+      )}
+      {pendingDelete && (
+        <ConfirmDeleteModal
+          name={`${repo}/${name}`}
+          kind="workspace"
+          onClose={() => setPendingDelete(false)}
+          onConfirm={async () => {
+            await deleteWorkspace(repo, name);
+            navigate(`/repos/${encodeURIComponent(repo)}`);
+          }}
+        />
+      )}
     </div>
   );
 }

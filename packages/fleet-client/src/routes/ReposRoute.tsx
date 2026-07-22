@@ -149,7 +149,7 @@ export function ConfirmDeleteModal({
   onConfirm,
 }: {
   name: string;
-  kind: "repo" | "ship";
+  kind: "repo" | "ship" | "workspace";
   onClose: () => void;
   onConfirm: () => Promise<void>;
 }) {

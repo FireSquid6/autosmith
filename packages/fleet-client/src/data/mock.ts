@@ -229,4 +229,18 @@ export class MockFleetBridge implements FleetBridge {
     workspace.agent = null;
     this.emit({ type: "workspace.deactivated", at: new Date().toISOString(), workspace: { ...workspace } });
   }
+
+  async switchBranch(repo: string, name: string, branch: string): Promise<void> {
+    const workspace = this.find(repo, name);
+    workspace.branch = branch;
+    this.emit({ type: "workspace.branch_changed", at: new Date().toISOString(), workspace: { ...workspace } });
+  }
+
+  async deleteWorkspace(repo: string, name: string): Promise<void> {
+    const i = this.workspaces.findIndex((w) => w.repoName === repo && w.name === name);
+    if (i === -1) throw new Error(`workspace not found: ${key(repo, name)}`);
+    const workspace = this.workspaces[i]!;
+    this.workspaces.splice(i, 1);
+    this.emit({ type: "workspace.removed", at: new Date().toISOString(), workspace: { ...workspace } });
+  }
 }

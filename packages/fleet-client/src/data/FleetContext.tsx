@@ -14,6 +14,10 @@ interface FleetValue {
   liveCount: number;
   activate: (repo: string, name: string) => Promise<void>;
   deactivate: (repo: string, name: string) => Promise<void>;
+  /** Switch a workspace's branch, then refresh the workspace list. Rejects on failure. */
+  switchBranch: (repo: string, name: string, branch: string) => Promise<void>;
+  /** Delete a workspace, then refresh the workspace list. Rejects on failure. */
+  deleteWorkspace: (repo: string, name: string) => Promise<void>;
   getWorkspace: (repo: string, name: string) => Promise<WorkspaceDetail>;
   /** Raw `git diff` text (incl. untracked files) for a workspace. */
   getWorkspaceDiff: (repo: string, name: string) => Promise<string>;
@@ -152,6 +156,24 @@ export function FleetProvider({ children }: { children: ReactNode }) {
     [refresh],
   );
 
+  // Like the repo/ship mutations, these rethrow so the driving modal can show the
+  // failure inline rather than swallowing it into the global banner.
+  const switchBranch = useCallback(
+    async (repo: string, name: string, branch: string) => {
+      await bridge.switchBranch(repo, name, branch);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const deleteWorkspace = useCallback(
+    async (repo: string, name: string) => {
+      await bridge.deleteWorkspace(repo, name);
+      await refresh();
+    },
+    [refresh],
+  );
+
   const value: FleetValue = {
     ships,
     repos,
@@ -161,6 +183,8 @@ export function FleetProvider({ children }: { children: ReactNode }) {
     liveCount: workspaces.filter((w) => w.active).length,
     activate,
     deactivate,
+    switchBranch,
+    deleteWorkspace,
     getWorkspace,
     getWorkspaceDiff,
     createRepo,
