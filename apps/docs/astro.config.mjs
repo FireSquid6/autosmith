@@ -4,6 +4,9 @@ import starlight from '@astrojs/starlight';
 
 // https://astro.build/config
 export default defineConfig({
+	// Set `site` to the deployed origin to enable sitemap generation; Starlight
+	// skips the sitemap (with a build warning) while it is unset.
+	// site: 'https://example.com',
 	integrations: [
 		starlight({
 			title: 'Fleet',
